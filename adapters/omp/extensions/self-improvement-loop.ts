@@ -221,10 +221,19 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
 
     try {
       const fd = openLogFd(REFLECTION_LOG);
+      // Ensure reflection subprocess has project context for memorix hook delivery.
+      // The subprocess inherits process.env but may need explicit working directory
+      // and HOME for memorix to properly bind project and deliver hooks.
       const child = spawn("omp", ["-p", prompt, "--resume", sessionFile], {
         detached: true,
         stdio: ["ignore", fd, fd],
-        env: { ...process.env, AGENT_FLYWHEEL_PASS: "1" },
+        cwd: process.cwd(), // Explicit working directory for memorix project binding
+        env: {
+          ...process.env,
+          AGENT_FLYWHEEL_PASS: "1",
+          // Ensure memorix finds its stores and config even in subprocess context
+          MEMORIX_HOME: process.env.MEMORIX_HOME || join(homedir(), ".memorix"),
+        },
       });
       child.unref();
     } catch {
