@@ -361,6 +361,12 @@ cmd_doctor() {
       fi
     fi
     if [ -x "$heal_src/install.sh" ]; then
+      # NOTE (plugin channel): if this CLI is the plugin copy, heal re-runs the
+      # plugin's install.sh, which also wires settings.json — adding a second
+      # Claude Code registration on top of the plugin's own hooks. That is
+      # bounded: the per-session close-out lock in session-end.sh dedups to a
+      # single reflection regardless. Heal only fires on genuine file loss (a
+      # healthy plugin passes doctor and never reaches here).
       echo
       printf '\033[34m→\033[0m self-heal: re-running %s/install.sh\n' "$heal_src"
       if [ "$heal_src" = "$FLYWHEEL_HOME" ]; then

@@ -20,6 +20,11 @@ flywheel_is_reflection_pass && exit 0
 INPUT="$(cat)"
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // empty')"
 TRANSCRIPT_PATH="$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')"
+# SessionEnd can fire more than once per session id (e.g. reason=clear then
+# reason=exit); the lock key includes reason so each distinct boundary reflects
+# once, while two registrations of the SAME event (plugin + settings.json double-
+# wire) still collapse to one. Sanitized to a lock-safe token.
+REASON="$(printf '%s' "$INPUT" | jq -r '.reason // "end"' 2>/dev/null | tr -c 'A-Za-z0-9_' '_' || echo end)"
 
 # Stop this session's periodic watcher (adapters/claude-code/hooks/periodic-watcher.sh)
 # regardless of whether we can spawn a reflection pass below.
@@ -29,20 +34,20 @@ fi
 
 [ -n "$SESSION_ID" ] || exit 0
 
-# Cross-source close-out lock. If agent-flywheel is wired BOTH as a Claude Code
-# plugin (hooks/hooks.json) AND via install.sh's settings.json — different
-# command strings, so Claude Code can't dedupe them — both SessionEnd hooks fire
-# and would each spawn a reflection pass (2x cost, racing ledger appends). An
-# atomic mkdir lock per session_id makes exactly one win, regardless of how many
-# registrations invoke this script. The reflection subprocess is separately
-# guarded from re-spawning by AGENT_FLYWHEEL_PASS (checked at the top).
-mkdir -p "$FLYWHEEL_HOME/watchers" 2>/dev/null || true
-if ! mkdir "$FLYWHEEL_HOME/watchers/${SESSION_ID}.reflect-lock" 2>/dev/null; then
-  exit 0
-fi
-
 PROMPT_FILE="$(flywheel_prompt_file)"
 [ -f "$PROMPT_FILE" ] || exit 0
+
+# Cross-source close-out lock, taken LAST — after every `|| exit 0` guard — so a
+# transient missing-prompt path can't leave a lock held and permanently suppress
+# this session's reflection. If agent-flywheel is wired BOTH as a plugin and via
+# install.sh's settings.json (different command strings, so Claude Code can't
+# dedupe them), both SessionEnd hooks fire; this atomic mkdir lock makes exactly
+# one win. The reflection subprocess itself is separately guarded from
+# re-spawning by AGENT_FLYWHEEL_PASS (checked at the top).
+mkdir -p "$FLYWHEEL_HOME/watchers" 2>/dev/null || true
+if ! mkdir "$FLYWHEEL_HOME/watchers/${SESSION_ID}.${REASON}.reflect-lock" 2>/dev/null; then
+  exit 0
+fi
 
 PROMPT="$(cat "$PROMPT_FILE")
 

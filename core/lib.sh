@@ -343,6 +343,22 @@ flywheel_mark_session_reflected() {
   date +%s > "$(flywheel_session_reflected_marker "$1")"
 }
 
+# Bounded reaper for the watchers/ dir. Per-session close-out locks
+# (<id>.reflect-lock) and reflected-at markers are keyed by unique session id
+# and never removed by the code that creates them, and watchers/ is in the
+# install protect[] list so a re-sync never reclaims them either — so without
+# this they leak one-or-two entries per session forever. Called best-effort at
+# session start; prunes lock dirs and markers older than $1 minutes (default
+# 1 day). A live watcher's own .pid is refreshed each run, so only truly stale
+# entries age out. Never fatal.
+flywheel_reap_watchers() {
+  local older_than_min="${1:-1440}"
+  local dir="$FLYWHEEL_HOME/watchers"
+  [ -d "$dir" ] || return 0
+  find "$dir" -maxdepth 1 -name '*.reflect-lock' -type d -mmin "+$older_than_min" -exec rmdir {} + 2>/dev/null || true
+  find "$dir" -maxdepth 1 -name '*.reflected-at' -type f -mmin "+$older_than_min" -delete 2>/dev/null || true
+}
+
 flywheel_delta_note() {
   local sid="$1" last human
   last="$(flywheel_session_reflected_at "$sid")"

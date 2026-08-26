@@ -78,6 +78,14 @@ test("self-improve --gate: --mark then re-gate is NOT due within the gap (exit 1
   assert.equal(second.status, 1);
 });
 
+test("self-improve --gate mode=days: fires once, then dedups the rest of the same day (CLI path)", () => {
+  const home = freshHome();
+  const today = new Date().toLocaleDateString("en-US", { weekday: "short" });
+  const env = { AGENT_FLYWHEEL_SELF_IMPROVE_MODE: "days", AGENT_FLYWHEEL_SELF_IMPROVE_DAYS: today };
+  assert.equal(run(["self-improve", "--gate", "--mark"], { home, env }).status, 0, "first matching-day gate is due");
+  assert.equal(run(["self-improve", "--gate"], { home, env }).status, 1, "second same-day gate dedups");
+});
+
 test("config.env drives the gate, and an env var overrides the file", () => {
   const home = freshHome();
   // File says off -> not due.

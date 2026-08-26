@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -239,9 +239,32 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
 
   // Periodic idle checkpoint. Armed once per process; a reflection-pass
   // subprocess never arms its own timer.
+  // Bounded reaper (parity with bash flywheel_reap_watchers): reflected-at
+  // markers under watchers/ are keyed by session and never removed, and
+  // watchers/ is excluded from install's re-sync cleanup — so prune stale ones
+  // (>1 day) at session start rather than leak one per session forever.
+  function reapWatchers(olderThanMs = 24 * 60 * 60 * 1000) {
+    const dir = join(FLYWHEEL_HOME, "watchers");
+    try {
+      const now = Date.now();
+      for (const name of readdirSync(dir)) {
+        if (!name.endsWith(".reflected-at") && !name.endsWith(".reflect-lock")) continue;
+        const p = join(dir, name);
+        try {
+          if (now - statSync(p).mtimeMs > olderThanMs) rmSync(p, { recursive: true, force: true });
+        } catch {
+          // ignore a single unremovable entry
+        }
+      }
+    } catch {
+      // no watchers/ dir yet, or unreadable: nothing to reap
+    }
+  }
+
   pi.on("session_start", async (_event, ctx) => {
     if (isReflectionPass || periodicTimerArmed) return;
     periodicTimerArmed = true;
+    reapWatchers();
 
     ctx.setInterval(() => {
       if (!ctx.isIdle()) return;

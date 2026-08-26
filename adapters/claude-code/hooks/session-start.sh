@@ -16,6 +16,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../../core/lib.sh"
 
 flywheel_is_reflection_pass && exit 0
 
+# Best-effort: reap stale close-out locks / reflected-at markers so watchers/
+# doesn't leak an entry per session forever (it's excluded from re-sync cleanup).
+flywheel_reap_watchers >/dev/null 2>&1 || true
+
 INPUT="$(cat)"
 SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)"
 TRANSCRIPT_PATH="$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || true)"
