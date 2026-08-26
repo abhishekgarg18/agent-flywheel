@@ -174,7 +174,10 @@ wire_omp() {
 
   # config.yml: idempotent marker-merge of the advisor: block only —
   # never touch modelRoles: or anything else already in the file.
-  if [ "$DRY_RUN" = "1" ]; then
+  # Skip if an unenclosed advisor: block already exists (pre-existing config).
+  if grep -q "^advisor:" "$omp_dir/config.yml" 2>/dev/null; then
+    warn "$omp_dir/config.yml already has an advisor: block — skipping merge (ensure it has enabled: true)"
+  elif [ "$DRY_RUN" = "1" ]; then
     printf '  [dry-run] merge advisor: block into %s\n' "$omp_dir/config.yml"
   else
     merge_marked_block "$omp_dir/config.yml" "advisor" <<'YAML'
