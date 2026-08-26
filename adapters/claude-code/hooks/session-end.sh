@@ -45,6 +45,10 @@ case "$REASON" in resume) exit 0 ;; esac
 # The reflection reads the transcript FILE directly (it is not pre-loaded), so a
 # transcript path is required — without it the pass would be blind.
 [ -n "$TRANSCRIPT_PATH" ] || exit 0
+# Machine-wide rate limit: rapid /new /clear /exit cycling would otherwise each
+# spawn a reflection (each writes memory), which bursts the memory backend. Bound
+# to once per AGENT_FLYWHEEL_MIN_REFLECT_GAP_SECONDS (default 120s).
+flywheel_reflect_gap_ok || exit 0
 
 PROMPT_FILE="$(flywheel_prompt_file)"
 [ -f "$PROMPT_FILE" ] || exit 0
@@ -73,7 +77,13 @@ $(flywheel_cli_note)"
 # the whole reflection. The prompt already carries the transcript path and reads
 # it directly, so resume is unnecessary. --no-session-persistence keeps the
 # reflection from cluttering the session list.
-AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --no-session-persistence >>"$(flywheel_reflection_log)" 2>&1 &
+# Lean MCP: load ONLY memorix, not playwright + every claude.ai connector — those
+# make each reflection heavy (and pile up when passes fire). $MCP_ARGS is
+# intentionally unquoted for word-splitting the flags.
+MCP_ARGS="$(flywheel_lean_mcp_args)"
+# shellcheck disable=SC2086
+AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --no-session-persistence $MCP_ARGS >>"$(flywheel_reflection_log)" 2>&1 &
 disown
+flywheel_mark_reflected_now
 
 exit 0

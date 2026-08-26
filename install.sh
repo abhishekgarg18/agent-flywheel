@@ -75,7 +75,7 @@ sync_repo() {
   local protect=(
     'MEMORY.md' 'GUARDRAILS.md' 'LEVEL.md' 'LEARN.log' 'SELF-IMPROVE.md'
     'config.env' 'reflection.log' 'advisor-autotune.log' 'advisor-autotune-decisions.log'
-    '.last-periodic-reflection' '.last-self-improve' '.source-checkout' 'watchers'
+    '.last-periodic-reflection' '.last-self-improve' '.last-reflection' '.source-checkout' '.reflection-mcp.json' 'watchers'
   )
   # AGENT_FLYWHEEL_NO_RSYNC=1 forces the tar/find fallback path — a test seam so
   # the fallback's delete-guard (the more dangerous branch) is exercisable even

@@ -168,6 +168,32 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
     );
   }
 
+  // Machine-wide reflection rate limit (parity with bash flywheel_reflect_gap_ok):
+  // rapid /new + exit cycling would otherwise each spawn a reflection, and every
+  // pass writes memory — which bursts the memory backend (and, with memorix
+  // maintenance running through a local model, storms the CPU). Bound
+  // session-boundary reflections to once per gap across the machine.
+  const REFLECT_MARKER = join(FLYWHEEL_HOME, ".last-reflection");
+  const MIN_REFLECT_GAP_MS =
+    (Number(readConfigStr("AGENT_FLYWHEEL_MIN_REFLECT_GAP_SECONDS", "120")) || 120) * 1000;
+  function reflectGapOk(): boolean {
+    if (MIN_REFLECT_GAP_MS <= 0) return true;
+    try {
+      const last = (Number(readFileSync(REFLECT_MARKER, "utf8").trim()) || 0) * 1000;
+      if (Date.now() - last < MIN_REFLECT_GAP_MS) return false;
+    } catch {
+      // no marker yet: allowed
+    }
+    return true;
+  }
+  function markReflected() {
+    try {
+      writeFileSync(REFLECT_MARKER, String(Math.floor(Date.now() / 1000)));
+    } catch {
+      // best-effort
+    }
+  }
+
   function spawnReflection(
     sessionFile: string,
     trigger: string,
@@ -351,7 +377,9 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
     if (event?.reason !== "new") return; // skip fork/resume: nothing "ended"
     const previous = event?.previousSessionFile;
     if (!previous) return;
+    if (!reflectGapOk()) return; // machine-wide rate limit (burst -> one)
     spawnReflection(previous, "/new");
+    markReflected();
   });
 
   // Fires on real process exit (Ctrl+D, closing the terminal, /exit) — the
@@ -360,6 +388,8 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
     if (isReflectionPass) return;
     const sessionFile = ctx.sessionManager?.getSessionFile?.();
     if (!sessionFile) return;
+    if (!reflectGapOk()) return; // machine-wide rate limit (burst -> one)
     spawnReflection(sessionFile, "process exit");
+    markReflected();
   });
 }

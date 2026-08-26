@@ -27,3 +27,5 @@ reflection.log
 
 # do-task orchestrator artifacts (spec/plan/verify for work ON this repo)
 .do-task/
+.reflection-mcp.json
+.last-reflection

@@ -52,7 +52,11 @@ $(flywheel_cli_note)"
         # Fresh headless pass (not --resume <uuid>, which fails with "No
         # conversation found" and would abort). The prompt carries the transcript
         # path and reads it directly. --no-session-persistence avoids clutter.
-        AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --no-session-persistence >>"$(flywheel_reflection_log)" 2>&1 &
+        # Lean MCP (only memorix, not every connector) — keeps the repeating
+        # idle checkpoint cheap. Unquoted for flag word-splitting.
+        MCP_ARGS="$(flywheel_lean_mcp_args)"
+        # shellcheck disable=SC2086
+        AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --no-session-persistence $MCP_ARGS >>"$(flywheel_reflection_log)" 2>&1 &
         disown
         # Record this session as reflected-on now, so the next checkpoint's delta
         # frame scopes the pass to only newer activity.

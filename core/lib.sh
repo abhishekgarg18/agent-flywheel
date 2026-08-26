@@ -87,6 +87,26 @@ flywheel_reflection_log() {
   echo "$FLYWHEEL_HOME/reflection.log"
 }
 
+# `claude` MCP flags for a reflection pass, so it does NOT load every MCP server
+# and claude.ai connector on each spawn — that is what makes a reflection heavy
+# and the machine feel suddenly slow when passes fire (each connector loads and
+# may block on auth). A reflection only needs memorix for memory; everything else
+# (playwright, the connectors) is dead weight it never uses. This emits flags to
+# load ONLY memorix when it is a local MCP server in ~/.claude.json, else no MCP
+# at all (memorix CLI + flat files still work). Set AGENT_FLYWHEEL_REFLECTION_MCP=all
+# to restore the old load-everything behavior. Claude-specific; harmless elsewhere.
+flywheel_lean_mcp_args() {
+  [ "${AGENT_FLYWHEEL_REFLECTION_MCP:-lean}" = "all" ] && return 0
+  command -v jq >/dev/null 2>&1 || { printf -- '--strict-mcp-config'; return 0; }
+  local src="$HOME/.claude.json" out="$FLYWHEEL_HOME/.reflection-mcp.json"
+  if [ -f "$src" ] && jq -e '.mcpServers.memorix' "$src" >/dev/null 2>&1 \
+     && jq '{mcpServers: {memorix: .mcpServers.memorix}}' "$src" > "$out" 2>/dev/null; then
+    printf -- '--strict-mcp-config --mcp-config %s' "$out"
+  else
+    printf -- '--strict-mcp-config'
+  fi
+}
+
 flywheel_learn_log() {
   echo "$FLYWHEEL_HOME/LEARN.log"
 }
@@ -312,6 +332,34 @@ flywheel_periodic_gap_ok() {
 flywheel_mark_periodic_ran() {
   mkdir -p "$FLYWHEEL_HOME"
   date +%s > "$FLYWHEEL_HOME/.last-periodic-reflection"
+}
+
+# Machine-wide rate limit on SESSION-END reflections. Rapid /new /clear /exit
+# cycling (or many concurrent sessions) would otherwise each spawn a full
+# reflection pass, and every pass writes memory — which, when memorix runs
+# maintenance through a local Ollama model, bursts into a CPU storm. This bounds
+# reflections to at most once per $1 seconds across every harness/session on the
+# machine (default 120s), so a real end still reflects but a burst collapses to
+# one. Returns 0 (ok to reflect) or 1 (too soon). Configurable via
+# AGENT_FLYWHEEL_MIN_REFLECT_GAP_SECONDS (0 disables the limit).
+flywheel_reflect_gap_ok() {
+  local min_gap="${1:-${AGENT_FLYWHEEL_MIN_REFLECT_GAP_SECONDS:-120}}"
+  case "$min_gap" in ''|*[!0-9]*) min_gap=120 ;; esac
+  [ "$min_gap" = "0" ] && return 0
+  local marker="$FLYWHEEL_HOME/.last-reflection"
+  if [ -f "$marker" ]; then
+    local last now
+    last="$(cat "$marker" 2>/dev/null || echo 0)"
+    case "$last" in ''|*[!0-9]*) last=0 ;; esac
+    now="$(date +%s)"
+    [ "$(( now - last ))" -lt "$min_gap" ] && return 1
+  fi
+  return 0
+}
+
+flywheel_mark_reflected_now() {
+  mkdir -p "$FLYWHEEL_HOME"
+  date +%s > "$FLYWHEEL_HOME/.last-reflection"
 }
 
 # Rate-limits the META self-improvement pass (the loop reflecting on itself) to
