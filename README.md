@@ -67,6 +67,9 @@ core/
       skill-authoring.txt     SKILL.md frontmatter contract + CREATE/UPDATE/COMPACT steps
       guardrails-format.txt   numbered-ledger format for binding corrections
       level-rubric.txt        L2-L5 self-scoring rubric for the LEVEL step
+      project-rules.txt        global-vs-project level routing: where a learned
+                              rule belongs (personal store vs the repo's own
+                              AGENTS.md/CLAUDE.md) so the harness learns per-project
 scripts/
   advisor-autotune.mjs      deterministic auto-tune for omp's native advisor subsystem
   idle-gap.mjs              idle/rate-limit check for harnesses with no native timer
@@ -297,7 +300,24 @@ still lives in `~/.agent-flywheel`, shared with every other harness.
   cadence (default: at session-end, at most weekly) it runs the META pass in
   `core/prompts/self-improve.txt` — auto-heal, then assess its own prompts,
   guardrail effectiveness, level trend, and next-skill curriculum. Tune when it
-  fires in `config.env` (see [Configuration](#configuration)).
+  fires in `config.env` (see [Configuration](#configuration)). It **proposes**
+  changes to its own machinery in `SELF-IMPROVE.md`; it never silently rewrites
+  a live prompt with no review.
+
+### Where lessons are written (global vs project)
+
+The reflection pass routes each lesson to the right **level** so it lands where
+it's actually needed (`core/prompts/reference/project-rules.txt`):
+
+- **Global** (how you work everywhere): your personal, machine-global store —
+  `~/.agent-flywheel/MEMORY.md` + `GUARDRAILS.md` (and memorix when reachable),
+  plus your global agent-instructions file if you keep one.
+- **Project** (this repo, any contributor, any harness): the repository's **own
+  `AGENTS.md`/`CLAUDE.md`** (a "Learned rules" section), so a teammate who never
+  installed agent-flywheel still inherits the convention.
+
+This is what makes the harness itself learn — not just your private store —
+at both levels.
 
 ### Avoiding double-wiring
 

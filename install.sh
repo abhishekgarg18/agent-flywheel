@@ -74,10 +74,13 @@ sync_repo() {
   # entry here is protected from --delete (rsync) and from the tar-fallback wipe.
   local protect=(
     'MEMORY.md' 'GUARDRAILS.md' 'LEVEL.md' 'LEARN.log' 'SELF-IMPROVE.md'
-    'config.env' 'reflection.log' 'advisor-autotune.log'
+    'config.env' 'reflection.log' 'advisor-autotune.log' 'advisor-autotune-decisions.log'
     '.last-periodic-reflection' '.last-self-improve' '.source-checkout' 'watchers'
   )
-  if command -v rsync >/dev/null 2>&1; then
+  # AGENT_FLYWHEEL_NO_RSYNC=1 forces the tar/find fallback path — a test seam so
+  # the fallback's delete-guard (the more dangerous branch) is exercisable even
+  # on a machine that has rsync.
+  if [ "${AGENT_FLYWHEEL_NO_RSYNC:-}" != "1" ] && command -v rsync >/dev/null 2>&1; then
     local excludes=(--exclude '.git' --exclude 'tests' --exclude 'node_modules')
     local p
     for p in "${protect[@]}"; do excludes+=(--exclude "$p"); done
@@ -98,6 +101,13 @@ sync_repo() {
   # deleted/corrupted managed files from. Skipped when installing in place.
   if [ "$ROOT_DIR" != "$FLYWHEEL_HOME" ]; then
     printf '%s\n' "$ROOT_DIR" > "$FLYWHEEL_HOME/.source-checkout"
+  fi
+  # Seed the user-editable config from the example on FIRST install only (never
+  # overwrite: config.env is in protect[], so a re-sync already can't clobber an
+  # edited one — this just makes the file the docs point at actually exist).
+  if [ ! -f "$FLYWHEEL_HOME/config.env" ] && [ -f "$FLYWHEEL_HOME/config.env.example" ]; then
+    cp "$FLYWHEEL_HOME/config.env.example" "$FLYWHEEL_HOME/config.env"
+    ok "Seeded $FLYWHEEL_HOME/config.env from config.env.example (edit it to tune cadence/memory)"
   fi
   ok "Synced to $FLYWHEEL_HOME"
 }
@@ -229,6 +239,26 @@ EOF
 main() {
   info "agent-flywheel installer — target: $FLYWHEEL_HOME"
   [ "$DRY_RUN" = "1" ] && info "(dry run — no files will be written)"
+
+  # Serialize real installs against each other (and against `doctor --heal`,
+  # which shells into this script). Two concurrent `rsync -a --delete` into the
+  # same FLYWHEEL_HOME could delete files the other is mid-write. mkdir is
+  # atomic; a lock orphaned by a crash is cleared after 5 minutes.
+  if [ "$DRY_RUN" != "1" ]; then
+    mkdir -p "$FLYWHEEL_HOME" 2>/dev/null || true
+    local lock="$FLYWHEEL_HOME/.install.lock"
+    if ! mkdir "$lock" 2>/dev/null; then
+      if [ -d "$lock" ] && [ -z "$(find "$lock" -maxdepth 0 -mmin -5 2>/dev/null)" ]; then
+        rmdir "$lock" 2>/dev/null || true
+        mkdir "$lock" 2>/dev/null || { err "could not acquire install lock ($lock)"; exit 1; }
+      else
+        err "another install or doctor --heal is in progress ($lock) — aborting to avoid a concurrent rsync --delete race on $FLYWHEEL_HOME"
+        exit 1
+      fi
+    fi
+    # shellcheck disable=SC2064
+    trap "rmdir '$lock' 2>/dev/null || true" EXIT
+  fi
 
   sync_repo
 

@@ -40,12 +40,20 @@ start() {
 
         PROMPT_FILE="$(flywheel_periodic_prompt_file)"
         [ -f "$PROMPT_FILE" ] || continue
+        DELTA_NOTE="$(flywheel_delta_note "$session_id")"
         PROMPT="$(cat "$PROMPT_FILE")
 
-This still-running, idle session, so far, is recorded at: $transcript (session id $session_id) — read it directly for grounding; this checkpoint pass's own history starts blank."
+This still-running, idle session, so far, is recorded at: $transcript (session id $session_id) — read it directly for grounding; this checkpoint pass's own history starts blank.${DELTA_NOTE:+
+
+$DELTA_NOTE}
+
+$(flywheel_cli_note)"
 
         AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --resume "$session_id" >>"$(flywheel_reflection_log)" 2>&1 &
         disown
+        # Record this session as reflected-on now, so the next checkpoint's delta
+        # frame scopes the pass to only newer activity.
+        flywheel_mark_session_reflected "$session_id"
       fi
     done
   ) &

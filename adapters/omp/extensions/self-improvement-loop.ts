@@ -1,8 +1,8 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 // agent-flywheel — omp adapter.
 //
@@ -116,10 +116,44 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
     }
   }
 
+  // Delta framing (parity with bash flywheel_delta_note): a periodic checkpoint
+  // re-reads a still-open session each time it fires; the marker lets the next
+  // pass scope itself to only what's new since the last one instead of re-scanning
+  // and re-storing early material. Keyed by session-file basename, kept under the
+  // protected watchers/ dir. Best-effort throughout.
+  function reflectedMarker(sessionFile: string): string {
+    return join(FLYWHEEL_HOME, "watchers", basename(sessionFile) + ".reflected-at");
+  }
+  function readReflectedAt(sessionFile: string): number {
+    try {
+      return Number(readFileSync(reflectedMarker(sessionFile), "utf8").trim()) || 0;
+    } catch {
+      return 0;
+    }
+  }
+  function markReflected(sessionFile: string) {
+    try {
+      mkdirSync(join(FLYWHEEL_HOME, "watchers"), { recursive: true });
+      writeFileSync(reflectedMarker(sessionFile), String(Math.floor(Date.now() / 1000)));
+    } catch {
+      // best-effort marker
+    }
+  }
+  function deltaNote(sessionFile: string): string {
+    const last = readReflectedAt(sessionFile);
+    if (!last) return "";
+    return (
+      `\n\nDELTA FRAME: a prior checkpoint this session already reflected on ` +
+      `everything up to ${new Date(last * 1000).toISOString()}. Only capture ` +
+      `what is NEW since then — do not re-scan or re-store earlier material; ` +
+      `dedupe against MEMORY.md.`
+    );
+  }
+
   function spawnReflection(
     sessionFile: string,
     trigger: string,
-    opts?: { promptFile?: string; framing?: string },
+    opts?: { promptFile?: string; framing?: string; extra?: string },
   ) {
     runAdvisorAutotune();
 
@@ -132,7 +166,11 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
         `${framing} is recorded at: ${sessionFile} — read it directly (the ` +
         `read tool, JSON Lines) for full grounding before acting; this ` +
         `reflection pass's own conversation history starts blank, it is NOT ` +
-        `pre-loaded from that file despite --resume.`;
+        `pre-loaded from that file despite --resume.` +
+        (opts?.extra ?? "") +
+        `\n\nagent-flywheel CLI for this install: ${join(FLYWHEEL_HOME, "bin", "agent-flywheel")} ` +
+        `— use this exact path for any \`agent-flywheel ...\` command referenced ` +
+        `above; it is NOT assumed to be on PATH in this reflection subprocess.`;
     } catch {
       return; // shared prompt file missing (not installed yet): nothing safe to run
     }
@@ -228,7 +266,10 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
       spawnReflection(sessionFile, "periodic idle checkpoint", {
         promptFile: PERIODIC_PROMPT_FILE,
         framing: "This still-running, idle session, so far,",
+        extra: deltaNote(sessionFile),
       });
+      // Scope the next checkpoint to only newer activity.
+      markReflected(sessionFile);
     }, PERIODIC_CHECK_MS);
   });
 

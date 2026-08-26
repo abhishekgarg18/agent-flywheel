@@ -1,0 +1,58 @@
+Reference: choosing the LEVEL for a learned rule, and recording it there (read before writing one).
+
+FIRST decide the LEVEL — the same lesson written at the wrong scope is either invisible where it's
+needed or noise everywhere else. Ask "where must this apply?":
+
+  - GLOBAL (applies to how YOU work across every repo/task, any harness): a personal habit, a
+    tooling preference, a "always/never do X" that isn't tied to one codebase. → write it to your
+    global stores: a binding correction goes in GUARDRAILS.md (~/.agent-flywheel/GUARDRAILS.md); a
+    durable fact/preference in MEMORY.md; and, if you maintain a global agent-instructions file
+    (e.g. ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md), the rule may also belong there. These load for
+    all your sessions regardless of repo.
+  - PROJECT (applies to anyone working in THIS repo, including other contributors and other
+    harnesses): a build/test command, a "never touch X" boundary, a naming rule, an ordering
+    constraint, an architecture invariant particular to this codebase. → write it to the project's
+    OWN agent-instructions file (below), so it loads for anyone who opens the repo — your personal
+    ~/.agent-flywheel store is invisible to a teammate.
+
+A rule can legitimately be BOTH (a global habit that also deserves a repo-specific reminder) — then
+record it at both levels, phrased for each audience. When unsure, prefer the narrower (project)
+level: a wrongly-global rule pollutes every unrelated session. The rest of this doc is the PROJECT
+level; the GLOBAL level is handled by the MEMORY and GUARDRAILS steps of the reflection prompt.
+
+Some lessons are a convention specific to THIS repository that every agent working in it should
+follow. Those belong in the project's own agent-instructions file, so they load for anyone (any
+harness) who opens the repo — not only in your personal ~/.agent-flywheel store.
+
+WHERE (write to the file the project already uses; do not invent a new one):
+  - AGENTS.md at the repo root — the harness-agnostic convention; prefer this if present.
+  - CLAUDE.md / GEMINI.md / .github/copilot-instructions.md — harness-specific equivalents; if
+    the repo keeps several in sync, update the one it treats as source of truth and note the
+    others may need the same line (do not silently fork them).
+  - .cursor/rules/*, .windsurfrules, .clinerules — editor-specific rule files, if that's what
+    the repo uses.
+  If NONE exists and the rule is genuinely durable, create AGENTS.md with a single "## Learned
+  rules" section rather than scattering guidance — but only for a real, recurring convention,
+  not a one-off.
+
+WHEN (all must hold):
+  - The rule is specific to this repo/project (a global habit is a GUARDRAIL/MEMORY instead).
+  - It generalizes beyond the one file/line you just touched.
+  - It would have saved this session's mistake or friction if it had been written already.
+  - It is a convention/boundary/command, not a reusable multi-step workflow (that's a SKILL).
+
+HOW:
+  - Append under a "## Learned rules" (or the repo's existing conventions/section) heading —
+    create the heading once if absent, then append; never duplicate an existing rule (read the
+    section first; if a close rule exists, sharpen it in place — same decay discipline as
+    GUARDRAILS).
+  - One imperative line each: what to do / not do, and the one-clause why. Concrete enough that
+    reading only that line changes behavior. Example:
+      - Run `./init.sh --only verify` before any repo work; never re-run the full pipeline.
+      - Never commit the cloned sibling repos — add `/<name>/` to .gitignore in the same change.
+  - This is a shared, tracked file: match its existing tone/format, and if the change is
+    non-trivial, leave it for the human to commit rather than committing on their behalf.
+
+Recording a project rule here is how the loop makes the HARNESS itself learn at the project
+level — the next agent (any harness, any contributor) inherits the lesson without re-discovering
+it. Still ALSO note it in ~/.agent-flywheel/MEMORY.md so your own cross-project store has it.

@@ -92,6 +92,36 @@ by inspection when touching either.
   its own wiring from the recorded `.source-checkout`. `doctor --heal` re-runs
   `install.sh` from that checkout when run out of the installed home (where its
   own `ROOT_DIR == FLYWHEEL_HOME` and thus has nothing to re-sync from itself).
+  The meta pass is **propose-only for anything that changes future behavior** —
+  it must never auto-edit a live/installed prompt/adapter copy (no diff, no
+  test, no review); it writes proposals to `SELF-IMPROVE.md`. Enforced by prose
+  in `self-improve.txt`, not code — keep it that way.
+- **`flywheel_load_config` is a security boundary, not a convenience parser.**
+  It runs at source time on every hook. The key is used in an indirect
+  expansion, so it MUST stay eval-free with the strict `*[!A-Za-z0-9_]*`
+  allowlist reject + `printf -v` assignment. Never reintroduce `eval` on
+  file-derived content. Pinned by `tests/lib-safety.test.mjs`.
+- **`.source-checkout` designates a script `doctor --heal` EXECUTES**, so heal
+  gates it through `flywheel_path_trusted` (owner + not group/other-writable,
+  GNU/BSD-stat aware). Any new "read a path from a state file then run it" code
+  MUST go through the same gate.
+- **Concurrency: three atomic mkdir locks.** `session-end.sh`'s per-session
+  `watchers/<id>.reflect-lock` (so plugin + settings.json double-wiring can't
+  double-spawn a reflection), `install.sh`'s `.install.lock` (so two installs /
+  a heal can't race `rsync --delete`), and `cmd_self_improve`'s
+  `.self-improve.lock` (so concurrent sessions can't both pass a stale cadence
+  marker). All self-clear when stale. Don't remove a lock without replacing it.
+- **Prompts never assume the CLI is on PATH.** The reflection subprocess doesn't
+  inherit the harness PATH or `${CLAUDE_PLUGIN_ROOT}`, so every spawn site
+  appends `flywheel_cli_note` (bash) / the equivalent (omp TS) and the prompts
+  reference "the CLI path at the end of this prompt". `flywheel_cli_path`
+  resolves relative to `lib.sh` so it's correct for BOTH install.sh and plugin
+  channels. Keep that indirection when adding a prompt that calls the CLI.
+- **Reflection routes lessons by LEVEL.** `reference/project-rules.txt` governs
+  global (personal store / global rules file) vs project (the repo's own
+  AGENTS.md/CLAUDE.md) — a project convention belongs in the repo so every
+  contributor/harness inherits it, not only `~/.agent-flywheel`. When editing
+  the MEMORY/PROJECT-RULE step, preserve the level decision.
 
 ## Conventions
 

@@ -25,7 +25,9 @@ PROMPT_FILE="$(flywheel_prompt_file)"
 
 PROMPT="$(cat "$PROMPT_FILE")
 
-The session that just ended has id ${SESSION_ID} — resume and read it directly for full grounding; this reflection pass's own conversation history starts blank."
+The session that just ended has id ${SESSION_ID} — resume and read it directly for full grounding; this reflection pass's own conversation history starts blank.
+
+$(flywheel_cli_note)"
 
 AGENT_FLYWHEEL_PASS=1 nohup copilot --resume "$SESSION_ID" -p "$PROMPT" >>"$(flywheel_reflection_log)" 2>&1 &
 disown

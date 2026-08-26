@@ -100,10 +100,11 @@ VERSION="0.2.0"
 source "$CORE_DIR/lib.sh"
 
 usage() {
-  # Slice the header comment block (line 2 through the line before the first
-  # `set -` line) rather than a hardcoded end line, so adding/removing a
-  # subcommand's doc block can never silently desync `help` output.
-  sed -n '2,/^set -/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
+  # Slice the header comment block (line 2 through the line before the actual
+  # `set -euo pipefail` line) rather than a hardcoded end line, so adding a
+  # subcommand's doc block never desyncs `help`. Anchored to the exact set line
+  # so a future `set -x` in a comment example can't truncate the output early.
+  sed -n '2,/^set -euo pipefail/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
 }
 
 cmd_nudge() {
@@ -304,7 +305,8 @@ cmd_doctor() {
   }
   check "FLYWHEEL_HOME exists ($FLYWHEEL_HOME)" "[ -d '$FLYWHEEL_HOME' ]"
   check "core prompts present" "[ -f '$(flywheel_prompt_file)' ] && [ -f '$(flywheel_periodic_prompt_file)' ] && [ -f '$(flywheel_nudge_file)' ]"
-  check "reference docs present" "[ -f '$CORE_DIR/prompts/reference/skill-roots.txt' ] && [ -f '$CORE_DIR/prompts/reference/skill-authoring.txt' ] && [ -f '$CORE_DIR/prompts/reference/guardrails-format.txt' ] && [ -f '$CORE_DIR/prompts/reference/level-rubric.txt' ]"
+  check "reference docs present" "[ -f '$CORE_DIR/prompts/reference/skill-roots.txt' ] && [ -f '$CORE_DIR/prompts/reference/skill-authoring.txt' ] && [ -f '$CORE_DIR/prompts/reference/guardrails-format.txt' ] && [ -f '$CORE_DIR/prompts/reference/level-rubric.txt' ] && [ -f '$CORE_DIR/prompts/reference/project-rules.txt' ]"
+  check "self-improve prompt present" "[ -f '$(flywheel_self_improve_prompt_file)' ]"
   check "node available (needed by scripts/*.mjs)" "command -v node >/dev/null 2>&1"
   check "\$FLYWHEEL_HOME is writable" "mkdir -p '$FLYWHEEL_HOME' && touch '$FLYWHEEL_HOME/.doctor-write-test' && rm -f '$FLYWHEEL_HOME/.doctor-write-test'"
 
@@ -346,7 +348,17 @@ cmd_doctor() {
     if [ -f "$FLYWHEEL_HOME/.source-checkout" ]; then
       local recorded
       recorded="$(cat "$FLYWHEEL_HOME/.source-checkout" 2>/dev/null || true)"
-      [ -n "$recorded" ] && [ -x "$recorded/install.sh" ] && heal_src="$recorded"
+      # SECURITY: .source-checkout designates a script we're about to EXECUTE. A
+      # state file must not be able to point heal at an attacker-controlled
+      # install.sh. Only trust a recorded checkout that (a) exists with an
+      # install.sh and (b) is owned by us and not group/other-writable — both the
+      # dir and the script. Otherwise fall back to this checkout ($ROOT_DIR).
+      if [ -n "$recorded" ] && [ -x "$recorded/install.sh" ] \
+         && flywheel_path_trusted "$recorded" && flywheel_path_trusted "$recorded/install.sh"; then
+        heal_src="$recorded"
+      elif [ -n "$recorded" ]; then
+        printf '\033[33m⚠\033[0m recorded .source-checkout (%s) is missing, not owned by you, or group/other-writable — refusing to execute its install.sh; healing from this checkout instead\n' "$recorded"
+      fi
     fi
     if [ -x "$heal_src/install.sh" ]; then
       echo
@@ -392,9 +404,30 @@ cmd_self_improve() {
   done
   # --gate honors the configured cadence (mode/trigger/days/gap in config.env).
   # Without --gate the meta pass is always printed — the manual on-demand path.
-  if [ "$gate" = "1" ] && ! flywheel_self_improve_due "$trigger"; then
-    echo "self-improve not due now per configured cadence (trigger=$trigger; see agent-flywheel memory / config.env) — skipping" >&2
-    return 1
+  if [ "$gate" = "1" ]; then
+    # Atomically serialize the due-check + mark so two sessions ending near-
+    # simultaneously (many terminals — the exact case the cadence floor exists
+    # for) can't BOTH read a stale marker, both pass the gate, and both run the
+    # expensive meta pass (whose step 0 heal would race a concurrent install
+    # rsync). mkdir is atomic; a lock orphaned by a crash is cleared after 60s.
+    mkdir -p "$FLYWHEEL_HOME" 2>/dev/null || true
+    local si_lock="$FLYWHEEL_HOME/.self-improve.lock"
+    if ! mkdir "$si_lock" 2>/dev/null; then
+      if [ -d "$si_lock" ] && [ -z "$(find "$si_lock" -maxdepth 0 -mmin -1 2>/dev/null)" ]; then
+        rmdir "$si_lock" 2>/dev/null || true
+        mkdir "$si_lock" 2>/dev/null || { echo "self-improve: could not acquire gate lock — skipping" >&2; return 1; }
+      else
+        echo "self-improve: another gate is in progress — skipping" >&2
+        return 1
+      fi
+    fi
+    if ! flywheel_self_improve_due "$trigger"; then
+      rmdir "$si_lock" 2>/dev/null || true
+      echo "self-improve not due now per configured cadence (trigger=$trigger; see config.env) — skipping" >&2
+      return 1
+    fi
+    [ "$mark" = "1" ] && flywheel_mark_self_improve_ran
+    rmdir "$si_lock" 2>/dev/null || true
   fi
   # The meta pass reads files (the flywheel checkout + ~/.agent-flywheel/*), not
   # a resumable transcript — so this prints the assembled prompt for the current
@@ -402,7 +435,9 @@ cmd_self_improve() {
   # There is deliberately no --resume spawn here: there is no prior session to
   # resume, the subject is the loop itself.
   flywheel_build_prompt self-improve "$repo" "The agent-flywheel repo checkout to assess is" "at"
-  [ "$mark" = "1" ] && flywheel_mark_self_improve_ran
+  # The gated path already marked atomically under the lock above; only the
+  # ungated manual `self-improve --mark` path needs to record the run here.
+  [ "$mark" = "1" ] && [ "$gate" = "0" ] && flywheel_mark_self_improve_ran
   return 0
 }
 
