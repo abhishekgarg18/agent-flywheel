@@ -145,8 +145,12 @@ spawn_harness_resume() {
       AGENT_FLYWHEEL_PASS=1 nohup omp -p "$prompt" --resume "$session" >>"$log" 2>&1 &
       disown ;;
     claude-code)
-      if [ "$print_only" = "1" ]; then printf 'claude -p %q --resume %q\n' "$prompt" "$session"; return 0; fi
-      AGENT_FLYWHEEL_PASS=1 nohup claude -p "$prompt" --resume "$session" >>"$log" 2>&1 &
+      # NOT --resume <uuid>: Claude Code's `-p --resume <session-id>` fails with
+      # "No conversation found" for a just-ended session, aborting reflection. The
+      # prompt already embeds the session/transcript reference and reads it
+      # directly, so a fresh --no-session-persistence pass is correct and robust.
+      if [ "$print_only" = "1" ]; then printf 'claude -p %q --no-session-persistence\n' "$prompt"; return 0; fi
+      AGENT_FLYWHEEL_PASS=1 nohup claude -p "$prompt" --no-session-persistence >>"$log" 2>&1 &
       disown ;;
     codex)
       if [ "$print_only" = "1" ]; then printf 'codex exec resume %q %q\n' "$session" "$prompt"; return 0; fi

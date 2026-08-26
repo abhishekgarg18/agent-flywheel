@@ -24,7 +24,10 @@ const SESSION_PATH = "/tmp/agent-flywheel-test-session.jsonl";
 // that harness emits.
 const HARNESSES = {
   omp: { bin: "omp", argvOf: (prompt, session) => ["-p", prompt, "--resume", session] },
-  "claude-code": { bin: "claude", argvOf: (prompt, session) => ["-p", prompt, "--resume", session] },
+  // claude-code deliberately does NOT --resume (that flag fails with "No
+  // conversation found" for a just-ended session); it reflects via a fresh
+  // --no-session-persistence pass, reading the transcript referenced in the prompt.
+  "claude-code": { bin: "claude", argvOf: (prompt, _session) => ["-p", prompt, "--no-session-persistence"] },
   codex: { bin: "codex", argvOf: (prompt, session) => ["exec", "resume", session, prompt] },
   copilot: { bin: "copilot", argvOf: (prompt, session) => ["--resume", session, "-p", prompt] },
 };

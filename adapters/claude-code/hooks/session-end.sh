@@ -24,7 +24,12 @@ TRANSCRIPT_PATH="$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')"
 # reason=exit); the lock key includes reason so each distinct boundary reflects
 # once, while two registrations of the SAME event (plugin + settings.json double-
 # wire) still collapse to one. Sanitized to a lock-safe token.
-REASON="$(printf '%s' "$INPUT" | jq -r '.reason // "end"' 2>/dev/null | tr -c 'A-Za-z0-9_' '_' || echo end)"
+# tr -cd (delete, not replace): jq's trailing newline is not in the allowed set,
+# so `tr -c ... '_'` used to turn it into a trailing "_" (REASON="resume_"),
+# which broke the exact-match reason skip below. Deleting disallowed chars yields
+# a clean token.
+REASON="$(printf '%s' "$INPUT" | jq -r '.reason // "end"' 2>/dev/null | tr -cd 'A-Za-z0-9_' || echo end)"
+[ -n "$REASON" ] || REASON="end"
 
 # Stop this session's periodic watcher (adapters/claude-code/hooks/periodic-watcher.sh)
 # regardless of whether we can spawn a reflection pass below.
@@ -32,7 +37,14 @@ if [ -n "$SESSION_ID" ]; then
   "$(dirname "${BASH_SOURCE[0]}")/periodic-watcher.sh" stop "$SESSION_ID" || true
 fi
 
+# reason=resume is NOT a session end — it fires when a session is being resumed;
+# reflecting then is both pointless and the session isn't closed. Skip it.
+case "$REASON" in resume) exit 0 ;; esac
+
 [ -n "$SESSION_ID" ] || exit 0
+# The reflection reads the transcript FILE directly (it is not pre-loaded), so a
+# transcript path is required — without it the pass would be blind.
+[ -n "$TRANSCRIPT_PATH" ] || exit 0
 
 PROMPT_FILE="$(flywheel_prompt_file)"
 [ -f "$PROMPT_FILE" ] || exit 0
@@ -51,11 +63,17 @@ fi
 
 PROMPT="$(cat "$PROMPT_FILE")
 
-The session that just ended is recorded at: ${TRANSCRIPT_PATH:-<unknown, use --resume>} (session id ${SESSION_ID}) — read it directly for full grounding; this reflection pass's own conversation history starts blank, it is NOT pre-loaded from that file despite --resume.
+The session that just ended is recorded at: ${TRANSCRIPT_PATH} (session id ${SESSION_ID}) — read that transcript file directly (it is JSON Lines) for full grounding; this reflection pass's own conversation history starts blank, nothing is pre-loaded.
 
 $(flywheel_cli_note)"
 
-AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --resume "$SESSION_ID" >>"$(flywheel_reflection_log)" 2>&1 &
+# Spawn a fresh headless pass, NOT `--resume <session_id>`: Claude Code's
+# `-p --resume <uuid>` fails with "No conversation found" for a just-ended
+# session (the id isn't a resumable conversation in that store), which aborted
+# the whole reflection. The prompt already carries the transcript path and reads
+# it directly, so resume is unnecessary. --no-session-persistence keeps the
+# reflection from cluttering the session list.
+AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --no-session-persistence >>"$(flywheel_reflection_log)" 2>&1 &
 disown
 
 exit 0

@@ -44,6 +44,16 @@ by inspection when touching either.
   adapter spawns a *new*, detached, headless subprocess against the
   transcript that just ended, guarded by `AGENT_FLYWHEEL_PASS=1` so that
   subprocess's own eventual exit does not recursively spawn another pass.
+- **Claude reflection does NOT `--resume <session_id>`.** `claude -p --resume
+  <uuid>` fails with "No conversation found" for a just-ended session and aborts
+  the whole reflection — the live bug this replaced. Claude spawns run
+  `claude -p "$PROMPT" --no-session-persistence`; the prompt carries the
+  transcript path and reads it directly. Don't "restore" `--resume` for the
+  claude-code adapter or `bin` claude branch. (omp/codex/copilot resume by their
+  own key and are unaffected.) Also: the SessionEnd hook skips `reason=resume`
+  (not a real end) and requires a transcript path; `REASON` is sanitized with
+  `tr -cd` (delete, not replace) so jq's trailing newline can't become a `_`
+  that breaks the exact-match reason skip.
 - **Never redirect child stdio to `/dev/null`.** Every detached spawn
   (bash adapters and the omp extension) redirects to
   `~/.agent-flywheel/reflection.log` (`flywheel_reflection_log` /
