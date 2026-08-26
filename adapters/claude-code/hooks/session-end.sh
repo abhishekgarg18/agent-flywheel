@@ -36,7 +36,7 @@ PROMPT="$(cat "$PROMPT_FILE")
 
 The session that just ended is recorded at: ${TRANSCRIPT_PATH:-<unknown, use --resume>} (session id ${SESSION_ID}) — read it directly for full grounding; this reflection pass's own conversation history starts blank, it is NOT pre-loaded from that file despite --resume."
 
-AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --resume "$SESSION_ID" >/dev/null 2>&1 &
+AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --resume "$SESSION_ID" >>"$(flywheel_reflection_log)" 2>&1 &
 disown
 
 exit 0

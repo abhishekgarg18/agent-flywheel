@@ -50,6 +50,15 @@ check "settings.json kept pre-existing existingKey" "$(python3 -c "import json;p
 check "settings.json has exactly one SessionStart hook" "$(python3 -c "import json;d=json.load(open('$FAKE_HOME/.claude/settings.json'));print(0 if len(d['hooks']['SessionStart'])==1 else 1)")"
 check "settings.json has exactly one SessionEnd hook" "$(python3 -c "import json;d=json.load(open('$FAKE_HOME/.claude/settings.json'));print(0 if len(d['hooks']['SessionEnd'])==1 else 1)")"
 
+echo "=== agent-flywheel doctor / reflect (against the freshly installed HOME) ==="
+DOCTOR_OUT="$(AGENT_FLYWHEEL_HOME="$FAKE_HOME/.agent-flywheel" "$ROOT_DIR/bin/agent-flywheel" doctor || true)"
+check "doctor reports all checks passed" "$(printf '%s' "$DOCTOR_OUT" | grep -q 'all checks passed' && echo 0 || echo 1)"
+check "doctor found FLYWHEEL_HOME" "$(printf '%s' "$DOCTOR_OUT" | grep -q 'FLYWHEEL_HOME exists' && echo 0 || echo 1)"
+
+REFLECT_OUT="$(AGENT_FLYWHEEL_HOME="$FAKE_HOME/.agent-flywheel" "$ROOT_DIR/bin/agent-flywheel" reflect --harness omp --session /tmp/agent-flywheel-fake-session --print || true)"
+check "reflect --print --harness omp emits an omp resume command" "$(printf '%s' "$REFLECT_OUT" | grep -q '^omp -p' && echo 0 || echo 1)"
+check "reflect --print --harness omp embeds the session path" "$(printf '%s' "$REFLECT_OUT" | grep -q -- '--resume /tmp/agent-flywheel-fake-session' && echo 0 || echo 1)"
+
 echo "=== install.sh (second run — idempotency) ==="
 HOME="$FAKE_HOME" "$ROOT_DIR/install.sh" --home "$FAKE_HOME/.agent-flywheel"
 

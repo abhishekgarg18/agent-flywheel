@@ -1,0 +1,39 @@
+Reference: authoring/updating a skill (read this before UPDATE or CREATE, apply COMPACT after either).
+
+Frontmatter contract (every SKILL.md, no exceptions):
+  ---
+  name: <kebab-case, matches directory name>
+  description: <one sentence, 4-6 distinct trigger phrases a future agent would actually type,
+                not prose documentation — this is the only field used to decide whether to invoke it>
+  ---
+
+UPDATE (a matching skill already exists — from CHECK-EXISTING):
+  - Small, additive correction (a wrong command, a missing flag, an outdated path, one new trigger
+    phrase) → apply directly in place.
+  - Substantial change (restructuring sections, changing the core procedure, splitting into
+    references/) → read the whole file first, preserve every behavior/trigger phrase still valid,
+    and never silently drop a capability another consumer might rely on — this is a shared file,
+    not a scratch doc.
+  - An "error found in skill" (the skill told you to do something wrong, or a path/command in it
+    no longer exists) is itself an UPDATE, not a new memory bullet — fix the skill so the next
+    agent that reads it doesn't repeat the mistake.
+
+CREATE (nothing matched):
+  - Only for a workflow that recurred 3+ times (this session or across sessions per MEMORY.md) with
+    no existing skill/doc/script covering it — a one-off is a memory bullet, not a skill.
+  - Scaffold with `agent-flywheel skill new <name> --root <path>` (writes the frontmatter above +
+    a references/ dir) rather than hand-rolling the structure.
+  - Pick the root from skill-roots.txt that matches where this recurring workflow actually applies
+    (project-local if it's specific to this repo, personal/global if it generalizes).
+
+COMPACT (mandatory immediately after every UPDATE or CREATE — never deferred to "later"):
+  - Re-read the whole file with fresh eyes. Cut restated obvious context, redundant examples,
+    ceremony. Keep: the trigger-phrase description, the exact steps/commands, the one non-obvious
+    reason each step exists.
+  - Progressive disclosure: the main SKILL.md stays short; move verbose detail (long examples,
+    edge-case tables, per-language reference) into references/*.md that the main file points at by
+    name, only read when that specific detail is needed.
+  - A skill that grew past a few hundred lines without an obvious reason is a signal to split, not
+    a signal to keep appending.
+  - Never change behavior while compacting — this is a wording/structure pass, not a rewrite of
+    what the skill tells the agent to do.

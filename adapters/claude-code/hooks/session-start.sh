@@ -25,9 +25,9 @@ if [ -n "$SESSION_ID" ] && [ -n "$TRANSCRIPT_PATH" ]; then
   disown
 fi
 
-NUDGE_FILE="$(flywheel_nudge_file)"
-if [ -f "$NUDGE_FILE" ]; then
-  jq -n --rawfile ctx "$NUDGE_FILE" '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$ctx}}'
+NUDGE_TEXT="$(flywheel_render_nudge)"
+if [ -n "$NUDGE_TEXT" ]; then
+  jq -n --arg ctx "$NUDGE_TEXT" '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$ctx}}'
 fi
 
 exit 0

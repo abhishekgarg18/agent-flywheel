@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -54,6 +54,10 @@ const PERIODIC_PROMPT_FILE = join(FLYWHEEL_HOME, "core", "prompts", "periodic.tx
 const NUDGE_FILE = join(FLYWHEEL_HOME, "core", "prompts", "maturity-nudge.txt");
 const PERIODIC_MARKER_FILE = join(FLYWHEEL_HOME, ".last-periodic-reflection");
 const ADVISOR_AUTOTUNE_SCRIPT = join(FLYWHEEL_HOME, "scripts", "advisor-autotune.mjs");
+const ADVISOR_AUTOTUNE_LOG = join(FLYWHEEL_HOME, "advisor-autotune.log");
+const REFLECTION_LOG = join(FLYWHEEL_HOME, "reflection.log");
+const GUARDRAILS_FILE = join(FLYWHEEL_HOME, "GUARDRAILS.md");
+const LEVEL_FILE = join(FLYWHEEL_HOME, "LEVEL.md");
 const OMP_CONFIG_FILE = join(homedir(), ".omp", "agent", "config.yml");
 const OMP_SESSIONS_DIR = join(homedir(), ".omp", "agent", "sessions");
 const PERIODIC_CHECK_MS = 15 * 60 * 1000; // how often the idle check runs
@@ -64,10 +68,19 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
   let periodicTimerArmed = false;
   const isReflectionPass = process.env.AGENT_FLYWHEEL_PASS === "1";
 
+  function openLogFd(path: string): number | "ignore" {
+    try {
+      return openSync(path, "a");
+    } catch {
+      return "ignore";
+    }
+  }
+
   function runAdvisorAutotune() {
+    const fd = openLogFd(ADVISOR_AUTOTUNE_LOG);
     try {
       spawnSync("node", [ADVISOR_AUTOTUNE_SCRIPT, "--config", OMP_CONFIG_FILE, "--sessions-dir", OMP_SESSIONS_DIR], {
-        stdio: "ignore",
+        stdio: ["ignore", fd, fd],
         timeout: 5000,
       });
     } catch {
@@ -97,9 +110,10 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
     }
 
     try {
+      const fd = openLogFd(REFLECTION_LOG);
       const child = spawn("omp", ["-p", prompt, "--resume", sessionFile], {
         detached: true,
-        stdio: "ignore",
+        stdio: ["ignore", fd, fd],
         env: { ...process.env, AGENT_FLYWHEEL_PASS: "1" },
       });
       child.unref();
@@ -111,8 +125,12 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
 
   // Once per process, on the very first turn, inject the harness-agnostic
   // maturity nudge (core/prompts/maturity-nudge.txt — same file every other
-  // adapter reads) as a system-attributed message. Best-effort: a missing
-  // file (not installed yet) must never block the turn.
+  // adapter reads), PLUS (when present) a scannable index of GUARDRAILS.md
+  // titles and the last LEVEL.md trend line — mirrors bash's
+  // flywheel_render_nudge so a binding correction from a past session
+  // reaches the next session's first turn instead of sitting unread in a
+  // file nobody re-opens. Best-effort: a missing nudge file (not installed
+  // yet) must never block the turn.
   pi.on("before_agent_start", async () => {
     if (firstTurnSeen || isReflectionPass) return;
     firstTurnSeen = true;
@@ -122,6 +140,24 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
       nudgeText = readFileSync(NUDGE_FILE, "utf8").trim();
     } catch {
       return;
+    }
+
+    if (existsSync(GUARDRAILS_FILE)) {
+      const titles = readFileSync(GUARDRAILS_FILE, "utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("### G"))
+        .slice(-10);
+      if (titles.length > 0) {
+        nudgeText += `\n\nActive guardrails from past sessions (binding — read ${GUARDRAILS_FILE} for full detail before acting on any that seem relevant):\n${titles.join("\n")}`;
+      }
+    }
+
+    if (existsSync(LEVEL_FILE)) {
+      const lines = readFileSync(LEVEL_FILE, "utf8").trim().split("\n");
+      const last = lines[lines.length - 1];
+      if (last) {
+        nudgeText += `\n\nLast self-scored level: ${last} (see ${LEVEL_FILE} for trend)`;
+      }
     }
 
     return {

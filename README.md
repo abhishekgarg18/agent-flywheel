@@ -32,11 +32,21 @@ core/
     session-end.txt         reflection procedure run when a session ends
     periodic.txt            lightweight version run on an idle mid-session timer
     maturity-nudge.txt       first-turn habits nudge (spec-first, verify-gate, delegate)
+    reference/               fallback docs read by session-end.txt when the user's
+                              own dedicated skill (skill-creator, learn-from-session,
+                              level-up-coach, ...) isn't installed:
+      skill-roots.txt         where to look for existing skills (CHECK-EXISTING)
+      skill-authoring.txt     SKILL.md frontmatter contract + CREATE/UPDATE/COMPACT steps
+      guardrails-format.txt   numbered-ledger format for binding corrections
+      level-rubric.txt        L2-L5 self-scoring rubric for the LEVEL step
 scripts/
   advisor-autotune.mjs      deterministic auto-tune for omp's native advisor subsystem
   idle-gap.mjs              idle/rate-limit check for harnesses with no native timer
+  skill-scaffold.mjs        generic SKILL.md scaffolder + lister (skill new/list fallback)
 bin/
-  agent-flywheel            universal CLI: nudge | prompt | periodic-check | periodic-mark | autotune
+  agent-flywheel            universal CLI — see `agent-flywheel help` for the full list:
+                              nudge | prompt | reflect | skill new/list | log | memory |
+                              doctor | periodic-check | periodic-mark | autotune
 adapters/
   omp/                      extension (before_agent_start nudge, session hooks) + rules + config
   claude-code/               SessionStart/SessionEnd hooks + settings.json snippet
@@ -76,6 +86,114 @@ raised anything above a "nit" — i.e., it isn't earning its own API cost.
 This is a mechanical count, not an LLM instruction, on purpose: a config
 flip that depends on a model "remembering" to check a condition is exactly
 the kind of thing that should be code instead.
+
+```mermaid
+flowchart LR
+  subgraph core["core/ (single source of truth)"]
+    lib["lib.sh\n(shared bash helpers)"]
+    prompts["prompts/*.txt\n(session-end, periodic, nudge)"]
+    ref["prompts/reference/*.txt\n(skill-roots, skill-authoring,\nguardrails-format, level-rubric)"]
+  end
+
+  subgraph adapters["adapters/ (one thin adapter per harness)"]
+    ompA["omp\nextension.ts"]
+    ccA["Claude Code\nhooks/*.sh"]
+    cxA["Codex CLI\nhooks/*.sh"]
+    cpA["Copilot CLI\nhooks/*.sh"]
+  end
+
+  cli["bin/agent-flywheel\n(universal CLI fallback)"]
+
+  lib --> ompA & ccA & cxA & cpA & cli
+  prompts --> ompA & ccA & cxA & cpA & cli
+  ref -.read by the reflection pass itself.-> prompts
+
+  ompA & ccA & cxA & cpA & cli --> home[("~/.agent-flywheel/\nMEMORY.md, GUARDRAILS.md,\nLEVEL.md, LEARN.log, reflection.log")]
+```
+
+```mermaid
+flowchart TD
+  start(["Session ends / idle timeout / manual trigger"]) --> scan["1. SCAN (episodic)\nreread what happened this session"]
+  scan --> identify{"2. IDENTIFY\nclassify each candidate"}
+  identify -- "durable fact/preference" --> memory["3. MEMORY (semantic)\nmemorix + MEMORY.md"]
+  identify -- "binding correction" --> guardrails["4. GUARDRAILS\nGUARDRAILS.md ledger"]
+  identify -- "repeated 3+ times" --> skill["5. SKILL (procedural)\nCHECK-EXISTING -> CREATE/UPDATE -> COMPACT"]
+  identify -- "nothing qualifies" --> decay
+  memory --> decay["7. DECAY\ncorrect/remove stale entries in place"]
+  guardrails --> decay
+  skill --> decay
+  decay --> level{"session-end trigger?"}
+  level -- yes --> score["6. LEVEL\nself-score, append LEVEL.md"]
+  level -- "no (periodic pass)" --> log
+  score --> log["8. VISIBLE LOG\none line to LEARN.log"]
+  log --> done(["done — or explicitly 'nothing durable this session'"])
+```
+
+## Invocation Reference
+
+Every trigger below runs the exact same `core/prompts/*.txt` procedure; only
+*how it gets invoked* differs per harness.
+
+| Trigger | omp | Claude Code | Codex CLI | Copilot CLI | Anything else |
+|---|---|---|---|---|---|
+| **Automatic, session end** | `session_switch`/`session_shutdown` extension hooks spawn a detached `omp -p` | `SessionEnd` hook spawns a detached `claude -p --resume` | Manual wiring — `adapters/codex/hooks/session-end.sh` ready to call, see `notes.md` | Manual wiring — `adapters/copilot/hooks/session-end.sh` ready to call, see `notes.md` | n/a — trigger `agent-flywheel reflect --session <path>` from whatever hook your tool offers |
+| **Periodic, mid-session idle** | `ctx.setInterval` in the extension, gated by `scripts/idle-gap.mjs`-equivalent logic inline | `adapters/claude-code/hooks/periodic-watcher.sh` (external poll loop) | Not wired — no confirmed native timer hook; use `agent-flywheel periodic-check` from cron/a watcher | Same as Codex | `agent-flywheel periodic-check --transcript <path>` wired into any poll mechanism (cron, watcher script) |
+| **First-turn nudge** | `before_agent_start` extension hook, `additionalContext`-style system message | `SessionStart` hook, `additionalContext` | Not wired — paste `agent-flywheel nudge` output into your own first-turn context | Not wired — same as Codex | `agent-flywheel nudge` — pipe into AGENTS.md, a system prompt, or read it yourself before starting |
+| **Manual / on-demand** (before `/new`, `/clear`, or right now) | `agent-flywheel reflect` (no `--session`) prints the prompt for your *current* live session to follow inline | Same | Same | Same | Same — this is the harness-agnostic universal fallback for every trigger above |
+
+`agent-flywheel reflect --session <path> --harness <name> --print` always
+shows the exact command instead of running it — the same one-liner
+`spawn_harness_resume()` in `bin/agent-flywheel` and each adapter's hook
+script would otherwise spawn detached, letting you debug or wire it into
+a mechanism this project doesn't ship an adapter for yet.
+
+## What this bundles (and what it replaces)
+
+agent-flywheel is deliberately a **reimplementation, not a bundle** — zero
+runtime dependencies beyond `bash`, `node`, and (for the Claude Code
+adapter) `jq`, so it works the same on a fresh machine as on one with every
+AI tool already installed. It replaces the ad-hoc habit of *hoping* an
+agent remembers to reflect, self-correct, or turn a repeated workflow into
+a skill — the loop runs automatically, the same way, on every harness.
+
+It deliberately does **not** replace a dedicated skill you already use for
+one stage of the pipeline. If `memorix`/`claude-mem`, `skill-creator`,
+`learn-from-session`, or `level-up-coach` are installed and reachable, the
+shared prompts in `core/prompts/*.txt` say so explicitly and degrade to
+them as the preferred path for that stage — the `core/prompts/reference/*`
+fallback docs (skill-roots, skill-authoring, guardrails-format,
+level-rubric) only take over when nothing dedicated is present. Nothing
+here is meant to gate you away from a skill you already have; the goal is
+that the loop still works with zero setup when you don't.
+
+## What engineers usually miss
+
+- **A closing/switching session cannot run "one more turn."** Every
+  adapter's session-end path spawns a *new*, detached, headless subprocess
+  against the transcript that just ended, guarded by
+  `AGENT_FLYWHEEL_PASS=1` so that subprocess's own eventual exit doesn't
+  recursively spawn another reflection pass.
+- **`--resume` does not preload the old conversation.** The prompt text
+  says this explicitly on purpose: a reflection pass's context starts
+  blank even though it resumed the ended session's ID — it must read the
+  transcript file directly, not assume it's already in context.
+- **macOS ships bash 3.2** (no `mapfile`/`readarray`) as `/bin/bash` by
+  default. `spawn_harness_resume()` in `bin/agent-flywheel` is four plain
+  `case` branches instead of a generic argv-array abstraction for exactly
+  this reason — don't "simplify" it into something that needs bash 4+.
+- **Reflection/child-process output is never silently discarded.** Every
+  detached spawn (adapter hooks and the omp extension alike) redirects
+  stdout/stderr to `~/.agent-flywheel/reflection.log`, not `/dev/null` —
+  a silently-failing reflection pass is worse than a visible one.
+- **`--print` exists for a reason.** It reconstructs the exact same
+  shell-quoted command the real detached spawn would run (via bash's
+  `printf %q`), so you can verify a prompt/session round-trips correctly
+  — including embedded newlines and special characters — before trusting
+  the backgrounded version.
+- **Codex and Copilot are intentionally not auto-wired.** Their hook
+  schemas weren't confirmed against real, current CLI behavior while
+  building this project; shipping an unverified auto-wire step would be
+  worse than printing manual instructions. See each adapter's `notes.md`.
 
 ## Research grounding
 
@@ -131,9 +249,9 @@ safe.
 ## Testing
 
 ```bash
-node --test                        # unit tests for advisor-autotune.mjs + idle-gap.mjs
-./tests/install-idempotency.sh     # sandboxed install/uninstall smoke test (never touches your real config)
-shellcheck adapters/*/hooks/*.sh core/lib.sh install.sh uninstall.sh bin/agent-flywheel
+node --test                        # unit tests: advisor-autotune.mjs, idle-gap.mjs, skill-scaffold.mjs, reflect --print dispatch per harness
+./tests/install-idempotency.sh     # sandboxed install/uninstall smoke test, incl. doctor + reflect --print (never touches your real config)
+shellcheck adapters/*/hooks/*.sh core/lib.sh install.sh uninstall.sh bin/agent-flywheel --exclude=SC1091
 ```
 
 All three run in CI on every push/PR — see

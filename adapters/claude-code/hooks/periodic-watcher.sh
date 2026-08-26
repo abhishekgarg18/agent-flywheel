@@ -44,7 +44,7 @@ start() {
 
 This still-running, idle session, so far, is recorded at: $transcript (session id $session_id) — read it directly for grounding; this checkpoint pass's own history starts blank."
 
-        AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --resume "$session_id" >/dev/null 2>&1 &
+        AGENT_FLYWHEEL_PASS=1 nohup claude -p "$PROMPT" --resume "$session_id" >>"$(flywheel_reflection_log)" 2>&1 &
         disown
       fi
     done

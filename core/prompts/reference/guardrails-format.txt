@@ -1,0 +1,31 @@
+Reference: GUARDRAILS.md format and binding rule (read before the GUARDRAILS step).
+
+File: ~/.agent-flywheel/GUARDRAILS.md — a numbered ledger of corrections that must change future
+behavior, not just be remembered as trivia. This is the difference between a memory bullet (nice to
+know) and a guardrail (a rule that was violated once and must not be violated again).
+
+When to write one (only when ALL of these are true):
+  - The user explicitly corrected a specific behavior ("don't do X", "always do Y first", a
+    mid-session interjection marked priority/override), OR the session repeated a mistake a prior
+    guardrail already warned about (a regression — this is the strongest signal).
+  - The correction generalizes to more than this one file/task (a one-off typo fix is not a
+    guardrail).
+
+Format — one entry per rule, append-only except DECAY corrections:
+  ### G<N>: <five-to-ten word summary>
+  <1-3 sentences: what to do differently, and why — concrete enough that reading only this line
+  changes behavior next time, no need to re-read the session that produced it>
+  _(context: <one line — repo/task where this was learned>)_
+
+Numbering: read the file first, use the next unused N — never renumber existing entries (other
+context may reference "G14" by number).
+
+BINDING IMMEDIATELY, not just logged: a guardrail flagged this pass is binding starting the very
+next opportunity to apply it — this session if it recurs before ending (periodic pass), or next
+session via the maturity nudge (core/prompts/maturity-nudge.txt loads the current top of
+GUARDRAILS.md at session start specifically so this is enforced automatically, not left to the
+next agent noticing the file exists).
+
+DECAY applies to GUARDRAILS.md exactly like MEMORY.md: a guardrail proven wrong, obsolete, or
+superseded by a better rule gets corrected/removed in place — do not let a stale G-number linger
+next to its replacement.

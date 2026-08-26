@@ -1,0 +1,32 @@
+Reference: L-level self-scoring rubric (read before the LEVEL step, session-end trigger only —
+skip this step entirely on a periodic mid-session pass, the session isn't over yet).
+
+The ladder (borrowed framing: junior -> senior -> staff, same idea under any harness/title):
+
+  L2 — reactive: mega-prompts, no plan stated before editing, trusts its own "done" claim without
+       running anything, serializes work that had no dependency, re-litigates settled decisions.
+  L3 — checklist-following: plans before multi-file work, but plans and verification are ad hoc /
+       inconsistent across tasks.
+  L4 — habitual: consistently states load-bearing constraints before editing, delegates genuinely
+       independent sub-work instead of doing it serially, verifies with a real command/output
+       before claiming success.
+  L5 — owns the outcome: all of L4, plus proactively spots when a request should be decomposed,
+       catches itself about to solve an easier problem than the one asked and says so, treats a
+       user correction as a standing rule (see guardrails-format.txt) rather than a one-off fix.
+
+Score THIS session honestly against the ladder, 1 decimal allowed (e.g. "4.5"):
+  1. Was a plan/constraint-statement made before multi-file or ambiguous edits? (L3->L4 gate)
+  2. Was independent sub-work actually delegated/parallelized, or serialized out of habit? (L4 gate)
+  3. Was every "done"/"fixed"/"passing" claim backed by an actual command run and its output read,
+     not inferred? (L4 gate, the single most common regression)
+  4. Did a user correction get captured as a binding guardrail (not just a memory bullet) when it
+     should have been? (L5 gate)
+  5. Was scope quietly narrowed anywhere relative to what was actually asked? (L5 violation if yes)
+
+Write one line to ~/.agent-flywheel/LEVEL.md: `YYYY-MM-DD  <score>  <the ONE factor above that most
+limited the score this session, one sentence>` — newest at the bottom. Do not write a paragraph;
+the point is a scannable trend line across sessions, not a report.
+
+If the trend across the last several entries is flat or dropping, that itself is the most important
+single fact to surface in the session summary — say so plainly rather than only reporting today's
+number in isolation.

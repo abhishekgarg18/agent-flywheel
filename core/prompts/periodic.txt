@@ -1,8 +1,12 @@
-This session is still open — this is an idle mid-session checkpoint, not a close-out. Run a lightweight pass of the same self-improvement procedure against what has happened so far, without asking for confirmation:
+This session is still open — this is an idle mid-session checkpoint, not a close-out. Run a lightweight pass of the same self-improvement pipeline against what has happened so far, without asking for confirmation. Skip anything that needs the full session (LEVEL scoring is close-out only — see session-end.txt).
+
+Prerequisite skills (optional, same as the close-out pass): `task-observer` (SCAN), `skill-creator`/`skill-compactor` (SKILL), `learn-from-session` (GUARDRAILS), `memorix`/`claude-mem` (MEMORY — primary store when reachable). Prefer any of these over the fallback below when installed.
 
 1. SCAN. Reread what has happened in this session so far (it is not finished — more may follow after this checkpoint).
-2. REFLECT. If a genuinely reusable insight has already surfaced — not a play-by-play, something a different future session would benefit from — identify it. If nothing qualifies yet, that's expected; say so and stop, don't pad the report.
-3. WRITE. Append any accepted insight as one dated bullet to `~/.agent-flywheel/MEMORY.md` (create it with a one-line header if absent), and to this project's own memory convention if one is already in use — the same portable-plus-native rule as the close-out pass.
-4. Do NOT treat this as a session end: do not call any "session end"/"wrap up"/finalize tool or mechanism this harness exposes — the session is still running and will continue after this checkpoint.
+2. IDENTIFY. Classify anything found exactly as in session-end.txt step 2: MEMORY / GUARDRAILS / SKILL. If nothing qualifies yet, that's expected — say so and stop, don't pad the report.
+3. MEMORY. If `memorix`/`claude-mem` is reachable, store there as primary. ALWAYS also append to `~/.agent-flywheel/MEMORY.md` (create with a one-line header if absent) — the zero-dependency baseline. Also write to this project's own memory convention if one is already in use.
+4. GUARDRAILS. A user correction this session that must bind immediately cannot wait for close-out: follow `core/prompts/reference/guardrails-format.txt` (or `learn-from-session` if installed) now, same as the close-out pass — this is exactly the case where "binding starting the next opportunity to apply it" means later in THIS same session.
+5. SKILL. If a workflow has already repeated 3+ times so far and nothing covers it, run the CHECK-EXISTING → UPDATE/CREATE → COMPACT sequence from `core/prompts/reference/skill-roots.txt` + `skill-authoring.txt` now rather than waiting for close-out — a mid-session skill fix means the rest of THIS session benefits from it too.
+6. Do NOT treat this as a session end: do not call any "session end"/"wrap up"/finalize tool or mechanism this harness exposes — the session is still running and will continue after this checkpoint.
 
-Give a one-line summary of what was captured (or "nothing new yet") and stop.
+Append one line to `~/.agent-flywheel/LEARN.log` (same format as the close-out pass) if anything changed, then give a one-line summary of what was captured (or "nothing new yet") and stop.

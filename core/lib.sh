@@ -26,6 +26,99 @@ flywheel_nudge_file() {
   echo "$FLYWHEEL_CORE_DIR/prompts/maturity-nudge.txt"
 }
 
+flywheel_reflection_log() {
+  echo "$FLYWHEEL_HOME/reflection.log"
+}
+
+flywheel_learn_log() {
+  echo "$FLYWHEEL_HOME/LEARN.log"
+}
+
+flywheel_guardrails_file() {
+  echo "$FLYWHEEL_HOME/GUARDRAILS.md"
+}
+
+flywheel_level_file() {
+  echo "$FLYWHEEL_HOME/LEVEL.md"
+}
+
+# Renders the full session-start nudge: the static maturity-nudge.txt habits
+# text, PLUS (when present) a scannable index of GUARDRAILS.md titles and the
+# last LEVEL.md trend line — so a binding correction from a past session
+# actually reaches the next session's first turn instead of sitting unread
+# in a file nobody re-opens. Only the titles are inlined (cheap, bounded);
+# the nudge tells the agent to read the full entry before acting on one.
+flywheel_render_nudge() {
+  local nudge_file guardrails_file level_file titles last
+  nudge_file="$(flywheel_nudge_file)"
+  [ -f "$nudge_file" ] || return 0
+  cat "$nudge_file"
+
+  guardrails_file="$(flywheel_guardrails_file)"
+  if [ -f "$guardrails_file" ]; then
+    titles="$(grep '^### G' "$guardrails_file" 2>/dev/null | tail -10 || true)"
+    if [ -n "$titles" ]; then
+      printf '\nActive guardrails from past sessions (binding — read %s for full detail before acting on any that seem relevant):\n%s\n' "$guardrails_file" "$titles"
+    fi
+  fi
+
+  level_file="$(flywheel_level_file)"
+  if [ -f "$level_file" ]; then
+    last="$(tail -1 "$level_file" 2>/dev/null || true)"
+    [ -n "$last" ] && printf '\nLast self-scored level: %s (see %s for trend)\n' "$last" "$level_file"
+  fi
+}
+
+# Every root this project knows to check under CHECK-EXISTING before
+# scaffolding a new skill — mirrors core/prompts/reference/skill-roots.txt.
+# Prints only roots that actually exist, one per line; a project run from
+# somewhere with no project-local skills dir simply yields fewer lines.
+flywheel_skill_roots() {
+  local candidates=(
+    "$HOME/.claude/skills"
+    "$HOME/.codex/skills"
+    "$HOME/.omp/agent/managed-skills"
+    "$HOME/.omp/agent/skills"
+    "$PWD/.claude/skills"
+    "$PWD/.omp/skills"
+  )
+  local root
+  for root in "${candidates[@]}"; do
+    [ -d "$root" ] && echo "$root"
+  done
+}
+
+# Which harness CLIs are actually installed on this machine, one per line as
+# "<harness-name> <binary>" — used by `agent-flywheel reflect` to auto-detect
+# a target when --harness isn't given explicitly. Detects installed tooling,
+# never a currently-running session (there's no portable way to ask "which
+# harness is my parent process" from a plain shell command).
+flywheel_detected_harness_clis() {
+  command -v omp     >/dev/null 2>&1 && echo "omp omp"
+  command -v claude   >/dev/null 2>&1 && echo "claude-code claude"
+  command -v codex    >/dev/null 2>&1 && echo "codex codex"
+  command -v copilot  >/dev/null 2>&1 && echo "copilot copilot"
+  return 0
+}
+
+# Assembles the full prompt text for a trigger + session, identically to
+# what every adapter builds inline — single source of truth so
+# `agent-flywheel reflect`/`prompt` never drifts from what the hooks do.
+flywheel_build_prompt() {
+  local trigger="$1" session="${2:-}" framing="${3:-The session that just ended is}"
+  local file
+  case "$trigger" in
+    session-end) file="$(flywheel_prompt_file)" ;;
+    periodic) file="$(flywheel_periodic_prompt_file)" ;;
+    *) echo "unknown trigger: $trigger (expected session-end|periodic)" >&2; return 2 ;;
+  esac
+  [ -f "$file" ] || { echo "missing prompt file: $file" >&2; return 1; }
+  cat "$file"
+  if [ -n "$session" ]; then
+    printf '\n%s recorded at: %s — read it directly for full grounding; this pass'"'"'s own conversation history starts blank, it is NOT pre-loaded from that file despite --resume.\n' "$framing" "$session"
+  fi
+}
+
 flywheel_scripts_dir() {
   echo "$FLYWHEEL_CORE_DIR/../scripts"
 }

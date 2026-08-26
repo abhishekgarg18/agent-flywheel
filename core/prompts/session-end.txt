@@ -2,13 +2,41 @@ This session just ended. Run the self-improvement reflection pass now, without a
 
 Ground yourself first: the session transcript is referenced below — read it directly (whatever read/file tool this harness exposes). This reflection pass's own conversation history starts blank; it is NOT pre-loaded with that transcript just because it resumed the session.
 
-Follow this procedure (episodic scan -> reflect -> semantic write -> proceduralize -> decay stale entries — the standard reflection-agent pattern, not free-form summarizing):
+Prerequisite skills (optional, use when present, degrade to the built-in equivalent below when
+absent — CHECK-EXISTING in step 5a surfaces these automatically; a match there means "use it", not
+"build a duplicate"): `task-observer` (SCAN), `skill-creator` (CREATE), `skill-compactor` (COMPACT),
+`learn-from-session` (GUARDRAILS), `level-up-coach` (LEVEL), `memorix`/`claude-mem` (MEMORY —
+treat as the PRIMARY store, not just additive, whenever its tools are reachable in this session; it
+is designed to work across every harness this project supports). None of these are required — every
+stage below has a standalone fallback — but prefer the dedicated tool over the fallback whenever it
+is installed and reachable, rather than running both. Feel free to use, extend, or create any skill
+this stage needs; nothing here is meant to gate you away from a skill you already have.
 
-1. SCAN (episodic). Reread what happened this session: mistakes made and corrected, non-obvious facts discovered about this codebase/environment, explicit user preferences or corrections stated, repeatable procedures used more than once, and anything a future session would otherwise have to rediscover from scratch.
-2. REFLECT (extract, don't transcribe). Pick at most 2-3 items that are genuinely reusable — a DIFFERENT future session hitting a similar situation would benefit from knowing this. Reject anything that's just a play-by-play of this session's specific files/lines/output with no generalizable lesson. If nothing qualifies, that is the correct outcome — do not invent content to pad a report.
-3. WRITE (semantic memory, portable baseline). Append each accepted insight as one dated bullet to `~/.agent-flywheel/MEMORY.md` (create it with a one-line header if it doesn't exist yet: what, when it applies, why — one line each, newest at the bottom). This file has zero dependencies and always exists after the first run, regardless of which harness or project you're in.
-4. WRITE (project-native, if present — additive, never a substitute for step 3). If this project ALSO has its own memory convention already in use — a memory/reasoning tool, an AGENTS.md or CLAUDE.md "Learned rules" section, a wiki page, a durable-memory MCP tool — record it there too, in that convention's format. Detect this from what's already in the repo/context; do not assume any specific tool exists.
-5. PROCEDURALIZE (procedural memory). If the same multi-step workflow ran two or more times this session, or you can tell it will clearly recur, and no existing skill/doc/script already covers it, turn it into a short reusable skill, script, or checklist file rather than only prose memory. Skip this step if nothing repeatable came up.
-6. DECAY. If something you just learned contradicts or obsoletes an existing bullet already in `~/.agent-flywheel/MEMORY.md` (or the project-native store), correct or remove the stale bullet in place rather than appending a second, contradicting one. Stale memory is worse than no memory.
+This is the full pipeline (Reflexion/CoALA-grounded — episodic scan, semantic write, procedural write, decay — plus the skill-lifecycle and self-scoring stages below). Follow every stage in order; a stage with nothing to do is a valid, expected outcome — say so and move on, never pad it.
 
-Give a brief one-paragraph summary of exactly what was written (file paths + one-line gist), or state plainly that nothing qualified this session. Do not fabricate a report for a session that had nothing durable to record — "nothing new this session" is a valid and expected outcome, not a failure.
+1. SCAN (episodic). Reread what happened this session: mistakes made and corrected, non-obvious facts discovered about this codebase/environment, explicit user preferences or corrections stated (especially anything marked as an interjection/override), repeatable procedures used more than once, and any friction (fighting the tool, guessing wrong, redoing work) a future session would hit again. If `task-observer` is installed, its own logging convention/location takes over this stage.
+
+2. IDENTIFY. For each candidate from SCAN, classify it — this determines which later stage handles it:
+   - Reusable fact/preference, but doesn't rise to "must change future behavior" → MEMORY (step 3).
+   - The user explicitly corrected a specific behavior, or a mistake a prior guardrail already warned about recurred → GUARDRAILS (step 4).
+   - The same multi-step workflow ran 3+ times (this session or per MEMORY.md history), or clearly will recur, and nothing already covers it → SKILL (step 5).
+   Reject anything that's just a play-by-play of this session's specific files/lines/output with no generalizable lesson. If nothing qualifies anywhere, that is correct — do not invent content to pad a report.
+
+3. MEMORY (semantic). If `memorix` (or `claude-mem`) tools are reachable in this session, use them as the PRIMARY store for every accepted MEMORY-class insight — call its store operation the same way you would for any user-requested memory. ALWAYS ALSO append the same insight as one dated bullet to `~/.agent-flywheel/MEMORY.md` (create it with a one-line header if it doesn't exist yet) regardless of whether memorix is present — this is the zero-dependency baseline that keeps the pipeline working on any machine, harness, or project even when memorix isn't configured there. If this project additionally has its own convention already in use (an AGENTS.md/CLAUDE.md "Learned rules" section, a wiki page), record it there too.
+
+4. GUARDRAILS (binding corrections). For each GUARDRAILS-class item: if `learn-from-session` is installed, follow its own guardrail-file convention and location instead. Otherwise read `core/prompts/reference/guardrails-format.txt` (next to this file) and follow it exactly — numbered ledger at `~/.agent-flywheel/GUARDRAILS.md`, binding starting the next opportunity to apply it, not merely logged for later.
+
+5. SKILL (procedural memory, lifecycle). For each SKILL-class item:
+   a. CHECK-EXISTING — read `core/prompts/reference/skill-roots.txt` and follow its procedure (or run `agent-flywheel skill list`) before building anything. A match → UPDATE; nothing → CREATE.
+   b. If `skill-creator` is installed, prefer it for CREATE. Otherwise read `core/prompts/reference/skill-authoring.txt` and follow the matching UPDATE or CREATE procedure (or run `agent-flywheel skill new`).
+   c. COMPACT — mandatory immediately after step (b). If `skill-compactor` is installed, invoke it. Otherwise apply the COMPACT section of `skill-authoring.txt`. Never skip this because the skill "looks fine already."
+
+6. LEVEL (self-score, this trigger only — skip entirely on a periodic/mid-session pass). If `level-up-coach` is installed, prefer its rubric/routing. Otherwise read `core/prompts/reference/level-rubric.txt` and follow it: score this session, append one line to `~/.agent-flywheel/LEVEL.md`.
+
+7. DECAY. If anything learned this pass (in MEMORY, GUARDRAILS, or a skill) contradicts or obsoletes an existing entry, correct or remove the stale one in place rather than appending a second, contradicting entry anywhere — in memorix AND in MEMORY.md if both are in use. Stale memory is worse than no memory.
+
+8. VISIBLE LOG. Append exactly one line to `~/.agent-flywheel/LEARN.log` in this format (create the file if absent, never overwrite prior lines):
+   `<ISO8601 timestamp> [<trigger>] <one-line summary of what changed: files touched, G-number, skill name, or "nothing durable">`
+   This is the human-visible ledger — the one place a user can `tail -f ~/.agent-flywheel/LEARN.log` or run `agent-flywheel log` and see what every past pass actually did, across every harness and project. Keep it to one line per pass; verbosity belongs in MEMORY.md, not here.
+
+Finish with a brief one-paragraph summary of exactly what was written across every stage above (file paths + one-line gist each), or state plainly that nothing qualified this session. Do not fabricate a report for a session that had nothing durable to record.

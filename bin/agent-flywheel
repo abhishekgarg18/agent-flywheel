@@ -12,16 +12,48 @@
 #
 # Subcommands:
 #   agent-flywheel nudge
-#       Print the session-start maturity nudge (spec-first, verify-gate,
-#       delegate-reusable-work habits). Feed it into your harness's system
-#       prompt, AGENTS.md, or first-turn context however it accepts one.
+#       Print the session-start maturity nudge, plus (when present) the
+#       active GUARDRAILS.md titles and last LEVEL.md trend line. Feed it
+#       into your harness's system prompt, AGENTS.md, or first-turn context
+#       however it accepts one.
 #
 #   agent-flywheel prompt <session-end|periodic> [--session <path-or-id>]
-#       Print the fully-assembled reflection prompt for the given trigger,
-#       referencing --session if given (a transcript path or session id —
-#       whatever your harness uses to let the reflection pass ground
-#       itself). Pipe this into your harness's non-interactive/resume
-#       invocation.
+#       Print the fully-assembled reflection prompt for the given trigger.
+#       Pipe this into your harness's non-interactive/resume invocation, or
+#       just tell your CURRENTLY RUNNING agent to follow it right now — no
+#       process spawning needed for a manual, in-session trigger.
+#
+#   agent-flywheel reflect [--trigger session-end|periodic] [--session <path>] [--harness <name>] [--print]
+#       THE universal manual/on-demand trigger, covering every case that
+#       isn't "wait for the automatic hook":
+#         - No --session given: prints the assembled prompt (same as
+#           `prompt`) for you to run inline in your current live session —
+#           this is the right move mid-session, or right before `/new`/
+#           `/clear` if you don't trust the automatic hook to catch it.
+#         - --session given: forces the SAME detached background pass an
+#           automatic hook would have spawned, against that (usually just-
+#           ended) session/transcript. Requires --harness unless exactly
+#           one supported harness CLI is installed. --print shows the exact
+#           command instead of running it.
+#
+#   agent-flywheel skill new <name> --root <dir> --description "<text>" [--force]
+#   agent-flywheel skill list [--root <dir>]
+#       Scaffold or enumerate skills — the CREATE / CHECK-EXISTING half of
+#       the SKILL lifecycle stage. Omit --root on `list` to scan every
+#       known root (see core/prompts/reference/skill-roots.txt).
+#
+#   agent-flywheel log [--lines N]
+#       Tail the human-visible ledger (~/.agent-flywheel/LEARN.log) of what
+#       every past reflection pass, on any harness, actually did.
+#
+#   agent-flywheel memory [--guardrails|--level]
+#       Print ~/.agent-flywheel/MEMORY.md (default), GUARDRAILS.md, or
+#       LEVEL.md.
+#
+#   agent-flywheel doctor
+#       Verify the install actually works: FLYWHEEL_HOME synced, prompt
+#       files present, log directory writable, and one --print dry-run
+#       reflect per detected harness CLI.
 #
 #   agent-flywheel periodic-check --transcript <path> [--idle-seconds N] [--min-gap-seconds N]
 #       Exit 0 ("fire") if a mid-session periodic reflection pass should
@@ -44,14 +76,16 @@ BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$BIN_DIR/.." && pwd)"
 CORE_DIR="$ROOT_DIR/core"
 SCRIPTS_DIR="$ROOT_DIR/scripts"
-VERSION="0.1.0"
+VERSION="0.2.0"
+# shellcheck source=../core/lib.sh
+source "$CORE_DIR/lib.sh"
 
 usage() {
-  sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,64p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 cmd_nudge() {
-  cat "$CORE_DIR/prompts/maturity-nudge.txt"
+  flywheel_render_nudge
 }
 
 cmd_prompt() {
@@ -64,16 +98,195 @@ cmd_prompt() {
       *) echo "unknown option: $1" >&2; return 2 ;;
     esac
   done
-  local file
   case "$trigger" in
-    session-end) file="$CORE_DIR/prompts/session-end.txt" ;;
-    periodic) file="$CORE_DIR/prompts/periodic.txt" ;;
+    session-end|periodic) ;;
     *) echo "usage: agent-flywheel prompt <session-end|periodic> [--session <path>]" >&2; return 2 ;;
   esac
-  cat "$file"
-  if [ -n "$session" ]; then
-    echo
-    echo "The session/transcript this reflection pass concerns is at: $session — read it directly; this pass's own history starts blank."
+  flywheel_build_prompt "$trigger" "$session"
+}
+
+# Resumes a session with a prompt for one harness — the single place this
+# mapping lives, shared by --print (shows the shell-quoted command via
+# printf %q, safe even though the prompt itself contains embedded
+# newlines) and the real detached-spawn path, so they can never drift
+# apart. Deliberately not a generic argv-array abstraction: bash 3.2 (the
+# unmodified /bin/bash still shipped on stock macOS) has neither `mapfile`
+# nor `readarray`, so this stays four plain case branches instead.
+spawn_harness_resume() {
+  local harness="$1" session="$2" prompt="$3" print_only="$4"
+  local log
+  log="$(flywheel_reflection_log)"
+  case "$harness" in
+    omp)
+      if [ "$print_only" = "1" ]; then printf 'omp -p %q --resume %q\n' "$prompt" "$session"; return 0; fi
+      AGENT_FLYWHEEL_PASS=1 nohup omp -p "$prompt" --resume "$session" >>"$log" 2>&1 &
+      disown ;;
+    claude-code)
+      if [ "$print_only" = "1" ]; then printf 'claude -p %q --resume %q\n' "$prompt" "$session"; return 0; fi
+      AGENT_FLYWHEEL_PASS=1 nohup claude -p "$prompt" --resume "$session" >>"$log" 2>&1 &
+      disown ;;
+    codex)
+      if [ "$print_only" = "1" ]; then printf 'codex exec resume %q %q\n' "$session" "$prompt"; return 0; fi
+      AGENT_FLYWHEEL_PASS=1 nohup codex exec resume "$session" "$prompt" >>"$log" 2>&1 &
+      disown ;;
+    copilot)
+      if [ "$print_only" = "1" ]; then printf 'copilot --resume %q -p %q\n' "$session" "$prompt"; return 0; fi
+      AGENT_FLYWHEEL_PASS=1 nohup copilot --resume "$session" -p "$prompt" >>"$log" 2>&1 &
+      disown ;;
+    *) echo "unknown harness: $harness (expected omp|claude-code|codex|copilot)" >&2; return 2 ;;
+  esac
+}
+
+resolve_harness() {
+  local explicit="$1"
+  if [ -n "$explicit" ]; then
+    printf '%s' "$explicit"
+    return 0
+  fi
+  local found
+  found="$(flywheel_detected_harness_clis || true)"
+  local count
+  count="$(printf '%s' "$found" | grep -c . || true)"
+  if [ "$count" -eq 0 ]; then
+    echo "no supported harness CLI found on PATH — pass --harness explicitly" >&2
+    return 1
+  fi
+  if [ "$count" -gt 1 ]; then
+    echo "multiple harness CLIs found — pass --harness explicitly, one of:" >&2
+    printf '%s\n' "$found" | cut -d' ' -f1 >&2
+    return 1
+  fi
+  printf '%s' "$found" | cut -d' ' -f1
+}
+
+cmd_reflect() {
+  local trigger="session-end" session="" harness="" print_only=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --trigger) trigger="$2"; shift 2 ;;
+      --session) session="$2"; shift 2 ;;
+      --harness) harness="$2"; shift 2 ;;
+      --print) print_only=1; shift ;;
+      *) echo "unknown option: $1" >&2; return 2 ;;
+    esac
+  done
+
+  if [ -z "$session" ]; then
+    # No session to resume: print the prompt for the CURRENT live session to
+    # follow inline — the manual/mid-session/"before /new" case.
+    flywheel_build_prompt "$trigger" ""
+    return 0
+  fi
+
+  harness="$(resolve_harness "$harness")" || return 1
+  local prompt
+  prompt="$(flywheel_build_prompt "$trigger" "$session")"
+
+  if [ "$print_only" = "1" ]; then
+    spawn_harness_resume "$harness" "$session" "$prompt" 1
+    return 0
+  fi
+
+  spawn_harness_resume "$harness" "$session" "$prompt" 0
+  echo "spawned reflection pass: harness=$harness trigger=$trigger session=$session (log: $(flywheel_reflection_log))"
+}
+
+cmd_skill() {
+  local sub="${1:-}"
+  shift || true
+  case "$sub" in
+    new)
+      local name="${1:-}"
+      shift || true
+      node "$SCRIPTS_DIR/skill-scaffold.mjs" new "$name" "$@"
+      ;;
+    list)
+      local root=""
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --root) root="$2"; shift 2 ;;
+          *) echo "unknown option: $1" >&2; return 2 ;;
+        esac
+      done
+      if [ -n "$root" ]; then
+        node "$SCRIPTS_DIR/skill-scaffold.mjs" list --root "$root"
+      else
+        local r any=0
+        while IFS= read -r r; do
+          any=1
+          echo "== $r =="
+          node "$SCRIPTS_DIR/skill-scaffold.mjs" list --root "$r"
+        done < <(flywheel_skill_roots)
+        [ "$any" = "1" ] || echo "no known skill roots exist on this machine yet"
+      fi
+      ;;
+    *) echo "usage: agent-flywheel skill <new|list> ..." >&2; return 2 ;;
+  esac
+}
+
+cmd_log() {
+  local lines=50
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --lines) lines="$2"; shift 2 ;;
+      *) echo "unknown option: $1" >&2; return 2 ;;
+    esac
+  done
+  local file
+  file="$(flywheel_learn_log)"
+  if [ -f "$file" ]; then
+    tail -n "$lines" "$file"
+  else
+    echo "$file does not exist yet — no reflection pass has run" >&2
+  fi
+}
+
+cmd_memory() {
+  local file
+  case "${1:-}" in
+    --guardrails) file="$(flywheel_guardrails_file)" ;;
+    --level) file="$(flywheel_level_file)" ;;
+    "") file="$FLYWHEEL_HOME/MEMORY.md" ;;
+    *) echo "unknown option: $1 (expected --guardrails or --level)" >&2; return 2 ;;
+  esac
+  if [ -f "$file" ]; then
+    cat "$file"
+  else
+    echo "$file does not exist yet" >&2
+  fi
+}
+
+cmd_doctor() {
+  local ok=1
+  check() {
+    if eval "$2"; then
+      printf '\033[32m✓\033[0m %s\n' "$1"
+    else
+      printf '\033[31m✗\033[0m %s\n' "$1"
+      ok=0
+    fi
+  }
+  check "FLYWHEEL_HOME exists ($FLYWHEEL_HOME)" "[ -d '$FLYWHEEL_HOME' ]"
+  check "core prompts present" "[ -f '$(flywheel_prompt_file)' ] && [ -f '$(flywheel_periodic_prompt_file)' ] && [ -f '$(flywheel_nudge_file)' ]"
+  check "reference docs present" "[ -f '$CORE_DIR/prompts/reference/skill-roots.txt' ] && [ -f '$CORE_DIR/prompts/reference/skill-authoring.txt' ] && [ -f '$CORE_DIR/prompts/reference/guardrails-format.txt' ] && [ -f '$CORE_DIR/prompts/reference/level-rubric.txt' ]"
+  check "node available (needed by scripts/*.mjs)" "command -v node >/dev/null 2>&1"
+  check "\$FLYWHEEL_HOME is writable" "mkdir -p '$FLYWHEEL_HOME' && touch '$FLYWHEEL_HOME/.doctor-write-test' && rm -f '$FLYWHEEL_HOME/.doctor-write-test'"
+
+  local found any=0
+  found="$(flywheel_detected_harness_clis || true)"
+  while IFS=' ' read -r name _bin; do
+    [ -n "$name" ] || continue
+    any=1
+    check "reflect --print dry-run for $name" "\"$BIN_DIR/agent-flywheel\" reflect --harness '$name' --session /tmp/agent-flywheel-doctor-fake-session --print >/dev/null"
+  done <<< "$found"
+  [ "$any" = "1" ] || printf '\033[33m⚠\033[0m no harness CLI detected on PATH — install.sh wiring can'"'"'t be dry-run tested here, only manual invocation\n'
+
+  echo
+  if [ "$ok" = "1" ]; then
+    printf '\033[32mall checks passed\033[0m\n'
+  else
+    printf '\033[31msome checks failed — see above\033[0m\n'
+    return 1
   fi
 }
 
@@ -95,6 +308,11 @@ main() {
   case "$sub" in
     nudge) cmd_nudge "$@" ;;
     prompt) cmd_prompt "$@" ;;
+    reflect) cmd_reflect "$@" ;;
+    skill) cmd_skill "$@" ;;
+    log) cmd_log "$@" ;;
+    memory) cmd_memory "$@" ;;
+    doctor) cmd_doctor "$@" ;;
     periodic-check) cmd_periodic_check "$@" ;;
     periodic-mark) cmd_periodic_mark "$@" ;;
     autotune) cmd_autotune "$@" ;;

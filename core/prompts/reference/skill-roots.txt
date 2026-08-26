@@ -1,0 +1,24 @@
+Reference: where skills/rules live per harness (read this before CREATE, never guess a path).
+
+Check every root that exists on this machine, not just the harness currently running — a skill created once should be discoverable from any of them, and the point of CHECK-EXISTING is to never build a second copy of something that already exists in ANY of these:
+
+  ~/.claude/skills/                 Claude Code personal skills (SKILL.md per dir)
+  ~/.codex/skills/                  Codex CLI personal skills
+  ~/.omp/agent/managed-skills/      omp managed skills (written via its skill-management tool)
+  ~/.omp/agent/skills/              omp user-authored skills (read-only to any agent)
+  .omp/skills/                      project-local omp skills, if this repo has one
+  .claude/skills/                   project-local Claude Code skills, if this repo has one
+  <this project>/skills/            some repos vendor their own (check package.json/AGENTS.md for the convention before assuming)
+
+CHECK-EXISTING procedure (mandatory before scaffolding anything new):
+  1. List every root above that exists (a missing directory is not an error, just skip it).
+  2. Read each skill's frontmatter `description` field only (not the full body) — that's the
+     trigger-phrase signal, cheap to scan across dozens of skills.
+  3. A description whose trigger phrases materially overlap the new candidate = a match. Go to
+     UPDATE. No overlap anywhere = go to CREATE.
+  4. When genuinely unsure whether something already covers this, it is cheaper to open the one
+     candidate's full body than to create a near-duplicate skill — read it before deciding.
+
+`agent-flywheel skill list [--root <path>]` automates step 1-2 mechanically (enumerates every root
+above that exists, prints name + description one line each) — prefer running it over hand-listing
+directories.
