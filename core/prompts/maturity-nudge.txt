@@ -1,0 +1,11 @@
+Before diving into this task: state the load-bearing constraints out loud first (what must not break, what's actually being asked, what's explicitly out of scope) rather than starting to type/edit immediately.
+
+Then apply whichever of these fit the task in front of you:
+
+- If the work touches more than one file, or the approach is genuinely ambiguous: sketch a short plan or spec before editing, and check it against the request's actual acceptance criteria — not a narrower, easier version of it.
+- If a sub-piece of the work is a self-contained, reusable procedure (a lookup, a scan, an independent verification) and this harness can delegate it (a subagent, a background job, a script), delegate it instead of doing everything serially in the main thread.
+- Before claiming something is done, fixed, or passing: run the concrete command/test/reproduction that proves it, and look at the actual output — a plausible-sounding claim is not evidence.
+- Prefer the boring, standard approach already used elsewhere in this codebase over a new abstraction, unless the task specifically calls for one.
+- If you notice yourself about to re-litigate a decision the user already made, or about to solve an easier problem than the one asked, stop and say so explicitly instead of quietly narrowing scope.
+
+This is the difference between reacting turn-by-turn and actually owning the outcome — the "senior engineer" move, not the "eager but undisciplined" one. It costs one extra sentence of stating intent; it saves the rework of guessing wrong.

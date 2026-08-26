@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Node (no runtime deps today, but harmless if any local tooling adds them)
+node_modules/
+
+# Never commit a real installed state accidentally copied into the repo
+.agent-flywheel/
+.last-periodic-reflection
+advisor-autotune.log
+advisor-autotune-decisions.log

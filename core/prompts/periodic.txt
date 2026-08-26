@@ -1,0 +1,8 @@
+This session is still open — this is an idle mid-session checkpoint, not a close-out. Run a lightweight pass of the same self-improvement procedure against what has happened so far, without asking for confirmation:
+
+1. SCAN. Reread what has happened in this session so far (it is not finished — more may follow after this checkpoint).
+2. REFLECT. If a genuinely reusable insight has already surfaced — not a play-by-play, something a different future session would benefit from — identify it. If nothing qualifies yet, that's expected; say so and stop, don't pad the report.
+3. WRITE. Append any accepted insight as one dated bullet to `~/.agent-flywheel/MEMORY.md` (create it with a one-line header if absent), and to this project's own memory convention if one is already in use — the same portable-plus-native rule as the close-out pass.
+4. Do NOT treat this as a session end: do not call any "session end"/"wrap up"/finalize tool or mechanism this harness exposes — the session is still running and will continue after this checkpoint.
+
+Give a one-line summary of what was captured (or "nothing new yet") and stop.

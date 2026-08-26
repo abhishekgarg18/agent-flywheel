@@ -1,0 +1,28 @@
+{
+  "_comment": "Merge this into ~/.claude/settings.json (all your projects) or .claude/settings.json (one project). install.sh does this idempotently with jq; this file exists for anyone who prefers to hand-edit settings.json instead of running the installer's Claude Code step. Paths below assume agent-flywheel is installed at ~/.agent-flywheel — adjust if you used a different location.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.agent-flywheel/adapters/claude-code/hooks/session-start.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.agent-flywheel/adapters/claude-code/hooks/session-end.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

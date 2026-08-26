@@ -1,0 +1,32 @@
+{
+  "name": "agent-flywheel",
+  "version": "0.1.0",
+  "description": "A harness-agnostic reflect -> write -> proceduralize self-improvement loop for AI coding agents (omp, Claude Code, Codex CLI, GitHub Copilot CLI, or anything else with a shell).",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "agent-flywheel": "./bin/agent-flywheel"
+  },
+  "scripts": {
+    "test": "node --test",
+    "install-flywheel": "./install.sh",
+    "uninstall-flywheel": "./uninstall.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhishekgarg18/agent-flywheel.git"
+  },
+  "keywords": [
+    "ai-agent",
+    "coding-agent",
+    "self-improvement",
+    "reflexion",
+    "claude-code",
+    "codex-cli",
+    "copilot-cli",
+    "omp"
+  ]
+}

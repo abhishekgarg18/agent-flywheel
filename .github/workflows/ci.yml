@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Unit tests (node --test)
+        run: node --test
+
+      - name: Install/uninstall idempotency smoke test
+        run: ./tests/install-idempotency.sh
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck \
+            adapters/claude-code/hooks/*.sh \
+            adapters/codex/hooks/*.sh \
+            adapters/copilot/hooks/*.sh \
+            core/lib.sh \
+            install.sh \
+            uninstall.sh \
+            tests/install-idempotency.sh \
+            bin/agent-flywheel \
+            --shell=bash --exclude=SC1091
+
+      - name: bash -n syntax check every shell script
+        run: |
+          find . -name "*.sh" -not -path "./.git/*" -print0 | xargs -0 -n1 bash -n
+          bash -n bin/agent-flywheel

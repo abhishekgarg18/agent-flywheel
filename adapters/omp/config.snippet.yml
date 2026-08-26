@@ -1,0 +1,21 @@
+# Append this block to ~/.omp/agent/config.yml to enable the native advisor
+# subsystem that agent-flywheel's advisor-autotune.mjs manages. install.sh
+# does this for you idempotently (delimited by the markers below so it can
+# find and update its own block on a re-run without duplicating keys) — this
+# file exists for anyone who prefers to hand-edit config.yml instead of
+# running the installer's config step.
+#
+# If your config.yml already has a top-level `advisor:` or `modelRoles:`
+# key, merge these fields into your existing blocks by hand instead of
+# pasting this verbatim — YAML does not allow the same top-level key twice.
+
+# >>> agent-flywheel: advisor >>>
+advisor:
+  enabled: true
+  immuneTurns: 3
+  syncBacklog: "off"
+# <<< agent-flywheel: advisor <<<
+
+# Add this line inside your existing top-level `modelRoles:` map (don't
+# duplicate the `modelRoles:` key itself if you already have one):
+#   advisor: anthropic/claude-sonnet-5

@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# bin/agent-flywheel — the harness-agnostic entry point.
+#
+# The omp / Claude Code / Codex / Copilot adapters under adapters/ wire this
+# project into hook systems those harnesses already have. Not every AI
+# coding tool has hooks at all — this CLI is the fallback that works with
+# ANY of them: it never assumes a particular "resume with a prompt" flag or
+# event model, it just composes plain text on stdout that you pipe into
+# whatever invocation mechanism your tool supports (a Makefile target, a
+# git hook, a cron job, a keybinding, a custom script). See
+# adapters/generic/README.md for worked wiring examples.
+#
+# Subcommands:
+#   agent-flywheel nudge
+#       Print the session-start maturity nudge (spec-first, verify-gate,
+#       delegate-reusable-work habits). Feed it into your harness's system
+#       prompt, AGENTS.md, or first-turn context however it accepts one.
+#
+#   agent-flywheel prompt <session-end|periodic> [--session <path-or-id>]
+#       Print the fully-assembled reflection prompt for the given trigger,
+#       referencing --session if given (a transcript path or session id —
+#       whatever your harness uses to let the reflection pass ground
+#       itself). Pipe this into your harness's non-interactive/resume
+#       invocation.
+#
+#   agent-flywheel periodic-check --transcript <path> [--idle-seconds N] [--min-gap-seconds N]
+#       Exit 0 ("fire") if a mid-session periodic reflection pass should
+#       run now (transcript idle long enough AND the shared rate-limit
+#       marker allows it), exit 1 ("skip") otherwise. Wire this into
+#       whatever periodic/cron/watcher mechanism your harness or OS offers.
+#   agent-flywheel periodic-mark
+#       Record that a periodic reflection pass just ran (call this only
+#       after successfully spawning one).
+#
+#   agent-flywheel autotune --config <path> --sessions-dir <path> [options]
+#       Deterministic advisor-effectiveness auto-tune. Only meaningful for
+#       harnesses with a second-model advisor/reviewer subsystem (omp
+#       today); a no-op elsewhere.
+#
+#   agent-flywheel version | help
+set -euo pipefail
+
+BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$BIN_DIR/.." && pwd)"
+CORE_DIR="$ROOT_DIR/core"
+SCRIPTS_DIR="$ROOT_DIR/scripts"
+VERSION="0.1.0"
+
+usage() {
+  sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+cmd_nudge() {
+  cat "$CORE_DIR/prompts/maturity-nudge.txt"
+}
+
+cmd_prompt() {
+  local trigger="${1:-}"
+  shift || true
+  local session=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --session) session="$2"; shift 2 ;;
+      *) echo "unknown option: $1" >&2; return 2 ;;
+    esac
+  done
+  local file
+  case "$trigger" in
+    session-end) file="$CORE_DIR/prompts/session-end.txt" ;;
+    periodic) file="$CORE_DIR/prompts/periodic.txt" ;;
+    *) echo "usage: agent-flywheel prompt <session-end|periodic> [--session <path>]" >&2; return 2 ;;
+  esac
+  cat "$file"
+  if [ -n "$session" ]; then
+    echo
+    echo "The session/transcript this reflection pass concerns is at: $session — read it directly; this pass's own history starts blank."
+  fi
+}
+
+cmd_periodic_check() {
+  node "$SCRIPTS_DIR/idle-gap.mjs" check "$@"
+}
+
+cmd_periodic_mark() {
+  node "$SCRIPTS_DIR/idle-gap.mjs" mark "$@"
+}
+
+cmd_autotune() {
+  node "$SCRIPTS_DIR/advisor-autotune.mjs" "$@"
+}
+
+main() {
+  local sub="${1:-help}"
+  shift || true
+  case "$sub" in
+    nudge) cmd_nudge "$@" ;;
+    prompt) cmd_prompt "$@" ;;
+    periodic-check) cmd_periodic_check "$@" ;;
+    periodic-mark) cmd_periodic_mark "$@" ;;
+    autotune) cmd_autotune "$@" ;;
+    version|--version|-v) echo "agent-flywheel $VERSION" ;;
+    help|--help|-h) usage ;;
+    *) echo "unknown subcommand: $sub" >&2; usage >&2; return 2 ;;
+  esac
+}
+
+main "$@"
