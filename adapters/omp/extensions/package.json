@@ -1,0 +1,12 @@
+{
+  "name": "omp-extensions-local",
+  "version": "1.0.0",
+  "description": "Local extensions for Oh-my-Pi coding agent",
+  "type": "module",
+  "omp": {
+    "extensions": [
+      "./self-improvement-loop.ts",
+      "./superpowers-injection.ts"
+    ]
+  }
+}
