@@ -5,7 +5,7 @@
   "type": "module",
   "omp": {
     "extensions": [
-      "./self-improvement-loop.ts",
+      "./agent-flywheel-self-improvement-loop.ts",
       "./superpowers-injection.ts"
     ]
   }

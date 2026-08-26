@@ -154,6 +154,8 @@ wire_omp() {
   run mkdir -p "$omp_dir/extensions" "$omp_dir/rules"
   run cp "$FLYWHEEL_HOME/adapters/omp/extensions/self-improvement-loop.ts" \
     "$omp_dir/extensions/agent-flywheel-self-improvement-loop.ts"
+  run cp "$FLYWHEEL_HOME/adapters/omp/extensions/package.json" \
+    "$omp_dir/extensions/package.json"
   run cp "$FLYWHEEL_HOME/adapters/omp/rules/todo-continuation-enforcer.md" \
     "$omp_dir/rules/agent-flywheel-todo-continuation-enforcer.md"
   run cp "$FLYWHEEL_HOME/adapters/omp/rules/comment-checker.md" \
