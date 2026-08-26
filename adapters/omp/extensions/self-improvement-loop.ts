@@ -60,8 +60,36 @@ const GUARDRAILS_FILE = join(FLYWHEEL_HOME, "GUARDRAILS.md");
 const LEVEL_FILE = join(FLYWHEEL_HOME, "LEVEL.md");
 const OMP_CONFIG_FILE = join(homedir(), ".omp", "agent", "config.yml");
 const OMP_SESSIONS_DIR = join(homedir(), ".omp", "agent", "sessions");
-const PERIODIC_CHECK_MS = 15 * 60 * 1000; // how often the idle check runs
-const MIN_PERIODIC_GAP_MS = 2 * 60 * 60 * 1000; // floor between actual passes
+// Cadence knobs. Defaults match the bash side (core/lib.sh / periodic-watcher);
+// both harnesses read the SAME ~/.agent-flywheel/config.env so a user tuning the
+// cadence once applies it everywhere, instead of omp drifting from Claude Code.
+const DEFAULT_PERIODIC_CHECK_MS = 15 * 60 * 1000; // how often the idle check runs
+const DEFAULT_MIN_PERIODIC_GAP_MS = 2 * 60 * 60 * 1000; // floor between actual passes
+const CONFIG_FILE = join(FLYWHEEL_HOME, "config.env");
+
+// Minimal KEY=VALUE reader for the same config.env the bash side sources — no
+// YAML/dotenv dep, only AGENT_FLYWHEEL_* keys, env var wins over file (parity
+// with flywheel_load_config's precedence). Best-effort: a missing/garbled file
+// just yields the defaults.
+function readConfigSeconds(key: string, fallbackMs: number): number {
+  const envVal = process.env[key];
+  const fromEnv = envVal !== undefined ? Number(envVal) : NaN;
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv * 1000;
+  try {
+    for (const line of readFileSync(CONFIG_FILE, "utf8").split("\n")) {
+      const t = line.trim();
+      if (!t || t.startsWith("#") || !t.startsWith(key + "=")) continue;
+      const v = Number(t.slice(key.length + 1).trim());
+      if (Number.isFinite(v) && v > 0) return v * 1000;
+    }
+  } catch {
+    // no config file / unreadable: fall through to the default
+  }
+  return fallbackMs;
+}
+
+const PERIODIC_CHECK_MS = readConfigSeconds("AGENT_FLYWHEEL_PERIODIC_CHECK_SECONDS", DEFAULT_PERIODIC_CHECK_MS);
+const MIN_PERIODIC_GAP_MS = readConfigSeconds("AGENT_FLYWHEEL_MIN_PERIODIC_GAP_SECONDS", DEFAULT_MIN_PERIODIC_GAP_MS);
 
 export default function selfImprovementLoop(pi: ExtensionAPI): void {
   let firstTurnSeen = false;

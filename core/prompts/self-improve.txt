@@ -1,0 +1,36 @@
+This is a META self-improvement pass. Its subject is agent-flywheel ITSELF — the reflect → write → proceduralize loop — not the last coding session. You are acting as the AI engineer who owns this loop: the same discipline the loop asks of every session (state constraints, verify with evidence, fix the class not the instance) now applies to improving the loop's own prompts, adapters, and effectiveness. Run it without asking for confirmation.
+
+Ground yourself first. Read, in this order (skip any that don't exist yet — a missing file is a valid signal, not an error):
+  - `~/.agent-flywheel/LEARN.log` — every past pass's one-line outcome, across every harness/project.
+  - `~/.agent-flywheel/LEVEL.md` — the self-scored level trend.
+  - `~/.agent-flywheel/GUARDRAILS.md` — the binding-corrections ledger.
+  - `~/.agent-flywheel/MEMORY.md` — durable semantic memory (and memorix, if reachable — search it for recurring themes).
+  - the flywheel repo checkout named at the end of this prompt: `core/prompts/*.txt`, `core/prompts/reference/*.txt`, and the adapters — the actual text being assessed.
+
+This pass improves in BOTH directions, and you must cover both:
+  - OUTWARD (the loop improves the harness): the memory, guardrails, and skills the loop writes are what make the HARNESS itself learn — sharper guardrails, a new skill, a corrected reference doc all change how every future session behaves. Strengthening these is making the harness auto-learn.
+  - INWARD (the loop improves itself): its own prompts, adapters, cadence config, and machinery. This is the loop auto-learning about itself.
+
+Then work through these META checks. Each produces either a concrete proposed change or an explicit "healthy, no change." Never pad; a clean loop is a valid outcome.
+
+0. HEAL FIRST (self-repair before self-improvement). Run `agent-flywheel doctor --heal` (fall back to `~/.agent-flywheel/bin/agent-flywheel doctor --heal`). It re-syncs any deleted/corrupted managed file from the recorded source checkout and re-wires every harness, then re-checks. If it cannot fully heal (checkout moved, a harness CLI missing), note exactly which check still fails and what the user must do — a loop that can't verify its own wiring can't be trusted to have run at all. Only proceed to the checks below once the machinery is sound.
+
+1. IS THE LOOP EARNING ITS COST? Count LEARN.log lines whose summary is "nothing durable" (or equivalent) vs. lines that recorded a real memory/guardrail/skill. A high nothing-durable rate means the reflection prompt is firing when there's nothing to learn (tune the trigger cadence or the IDENTIFY bar), OR it's under-detecting real lessons (the SCAN/IDENTIFY wording is too strict). Say which, with the ratio as evidence.
+
+2. ARE GUARDRAILS ACTUALLY BINDING? For each guardrail in GUARDRAILS.md, scan LEARN.log/MEMORY.md for a later session that repeated the same mistake. A guardrail that was violated AFTER it was written is the strongest possible signal: the guardrail text is too weak, too buried, or the maturity-nudge isn't surfacing it. Propose a sharper rewrite of that specific guardrail, or a change to how `flywheel_render_nudge` surfaces it — don't just note the regression.
+
+3. IS THE LEVEL TREND MOVING? If LEVEL.md is flat or dropping across the last several entries, name the ONE recurring limiting factor (it's usually the same one — verify-before-claiming-done is the most common). Propose the specific prompt/nudge change most likely to move it. If it's rising, say so and stop — don't invent work.
+
+4. CURRICULUM — WHAT SKILL IS 2/3 BUILT? (Voyager-style.) Scan MEMORY.md + LEARN.log for a multi-step workflow that has recurred twice but not yet three times, or a skill that exists but keeps needing the same manual patch. That is the next skill to create or harden — the loop should propose its own next procedural-memory target, not wait for a third recurrence to notice. Name it and the trigger phrases it would carry.
+
+5. PROMPT/ADAPTER FRICTION. From reflection.log and any observed failures: did a reflection pass error, mis-read the transcript, spawn twice, or misfire on a harness? Trace it to the exact line in `core/prompts/*.txt` or an adapter and propose the fix. This is where the loop repairs its own machinery.
+
+6. DECAY THE META LAYER. If a past self-improve entry proposed a change that was made and proved wrong, or a reference doc (`core/prompts/reference/*.txt`) now contradicts how a dedicated skill actually behaves, correct it in place — the meta layer decays like any other memory.
+
+WRITING THE OUTCOME:
+  - Append one dated entry to `~/.agent-flywheel/SELF-IMPROVE.md` (create with a one-line header if absent): the date, the one-or-two highest-leverage findings, and for each a concrete proposed change (file + what to change + why). Keep it scannable — this is a trend ledger of the loop's own health, not a report.
+  - Also append one line to `~/.agent-flywheel/LEARN.log` in the normal format with trigger `[self-improve]`.
+  - If you are running inside the flywheel repo checkout AND a change is safe, small, and clearly correct (a guardrail rewording, a prompt clarification, a reference-doc fix), APPLY it directly to the file and note that you did. For anything structural (a new stage, an adapter change, a cadence change), propose it in SELF-IMPROVE.md for human review rather than self-applying — the loop improves itself, but structural changes to its own machinery still get a human in the loop.
+  - If everything is healthy, write exactly that: one dated line, "loop healthy — no change," with the one metric that most supports it (e.g. level trend +0.3 over last 4, zero guardrail regressions). Do not fabricate findings to justify the pass.
+
+Finish with a one-paragraph summary: the findings, what you applied vs. proposed, and the single most important thing about the loop's current health.

@@ -1,0 +1,16 @@
+{
+  "name": "agent-flywheel",
+  "owner": {
+    "name": "Abhishek Garg"
+  },
+  "description": "The agent-flywheel self-improvement loop, packaged as a single Claude Code plugin.",
+  "plugins": [
+    {
+      "name": "agent-flywheel",
+      "source": "./",
+      "description": "Automatic reflect -> write -> proceduralize loop for Claude Code: session-end reflection, first-turn maturity nudge, periodic mid-session checkpoint, weekly meta self-improvement. Wires the same core/ prompts every other harness adapter uses.",
+      "license": "MIT",
+      "keywords": ["self-improvement", "reflection", "memory", "skills"]
+    }
+  ]
+}

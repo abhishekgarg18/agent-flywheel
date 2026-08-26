@@ -46,14 +46,18 @@
 #       Tail the human-visible ledger (~/.agent-flywheel/LEARN.log) of what
 #       every past reflection pass, on any harness, actually did.
 #
-#   agent-flywheel memory [--guardrails|--level]
+#   agent-flywheel memory [--status|--guardrails|--level]
 #       Print ~/.agent-flywheel/MEMORY.md (default), GUARDRAILS.md, or
-#       LEVEL.md.
+#       LEVEL.md. --status reports which durable-memory backend (memorix /
+#       claude-mem / flat-file) the reflection pass will use as primary —
+#       see docs/prerequisites.md.
 #
-#   agent-flywheel doctor
+#   agent-flywheel doctor [--heal]
 #       Verify the install actually works: FLYWHEEL_HOME synced, prompt
 #       files present, log directory writable, and one --print dry-run
-#       reflect per detected harness CLI.
+#       reflect per detected harness CLI. --heal auto-repairs on failure by
+#       re-running install.sh once (re-sync + re-wire) and re-checking —
+#       fixes a deleted prompt file, an unwired hook, or a partial sync.
 #
 #   agent-flywheel periodic-check --transcript <path> [--idle-seconds N] [--min-gap-seconds N]
 #       Exit 0 ("fire") if a mid-session periodic reflection pass should
@@ -69,6 +73,21 @@
 #       harnesses with a second-model advisor/reviewer subsystem (omp
 #       today); a no-op elsewhere.
 #
+#   agent-flywheel self-improve [--repo <path>] [--gate] [--trigger <pt>] [--mark]
+#       META pass: print the prompt that makes the agent reflect on and
+#       improve THIS loop itself (its prompts, adapters, guardrail
+#       effectiveness, level trend, and next-skill curriculum) rather than
+#       the last coding session. Pipe it into any harness, or follow it
+#       inline in the current session. --repo points at the flywheel
+#       checkout to assess (default: this one). --gate prints the prompt
+#       only when the meta pass is DUE per the configured cadence
+#       (config.env: mode every-session|gap|days|off, trigger
+#       session-end|mid-session|both, gap-days, days-of-week), exiting 1
+#       otherwise — for hook/cron wiring. --trigger names the calling point
+#       (session-end default, or mid-session) so the gate can honor which
+#       point the user allowed. --mark records that a pass just ran (resets
+#       the gap clock). See core/prompts/self-improve.txt + config.env.example.
+#
 #   agent-flywheel version | help
 set -euo pipefail
 
@@ -81,7 +100,10 @@ VERSION="0.2.0"
 source "$CORE_DIR/lib.sh"
 
 usage() {
-  sed -n '2,64p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # Slice the header comment block (line 2 through the line before the first
+  # `set -` line) rather than a hardcoded end line, so adding/removing a
+  # subcommand's doc block can never silently desync `help` output.
+  sed -n '2,/^set -/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
 }
 
 cmd_nudge() {
@@ -246,8 +268,15 @@ cmd_memory() {
   case "${1:-}" in
     --guardrails) file="$(flywheel_guardrails_file)" ;;
     --level) file="$(flywheel_level_file)" ;;
+    --status)
+      # Report the active durable-memory backend (richest first) so a user can
+      # see whether the reflection pass will write to memorix as primary or fall
+      # back to the flat-file baseline. See docs/prerequisites.md.
+      echo "durable-memory backends reachable (richest first; reflection uses the first as primary):"
+      flywheel_memory_backend | sed 's/^/  - /'
+      return 0 ;;
     "") file="$FLYWHEEL_HOME/MEMORY.md" ;;
-    *) echo "unknown option: $1 (expected --guardrails or --level)" >&2; return 2 ;;
+    *) echo "unknown option: $1 (expected --status, --guardrails, or --level)" >&2; return 2 ;;
   esac
   if [ -f "$file" ]; then
     cat "$file"
@@ -257,6 +286,13 @@ cmd_memory() {
 }
 
 cmd_doctor() {
+  local heal=0 healed="${AGENT_FLYWHEEL_DOCTOR_HEALED:-0}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --heal) heal=1; shift ;;
+      *) echo "unknown option: $1 (expected --heal)" >&2; return 2 ;;
+    esac
+  done
   local ok=1
   check() {
     if eval "$2"; then
@@ -272,6 +308,15 @@ cmd_doctor() {
   check "node available (needed by scripts/*.mjs)" "command -v node >/dev/null 2>&1"
   check "\$FLYWHEEL_HOME is writable" "mkdir -p '$FLYWHEEL_HOME' && touch '$FLYWHEEL_HOME/.doctor-write-test' && rm -f '$FLYWHEEL_HOME/.doctor-write-test'"
 
+  # Informational, never a failure: report the durable-memory backend the
+  # reflection pass will treat as primary (memorix/claude-mem when reachable,
+  # flat-file baseline otherwise — see docs/prerequisites.md). The flat-file
+  # baseline always works, so this can't fail; it just tells the user which
+  # store is active.
+  local mem_primary
+  mem_primary="$(flywheel_memory_backend | head -1 | cut -d' ' -f1)"
+  printf '\033[34mℹ\033[0m durable-memory primary: %s (agent-flywheel memory --status for all)\n' "$mem_primary"
+
   local found any=0
   found="$(flywheel_detected_harness_clis || true)"
   while IFS=' ' read -r name _bin; do
@@ -284,10 +329,41 @@ cmd_doctor() {
   echo
   if [ "$ok" = "1" ]; then
     printf '\033[32mall checks passed\033[0m\n'
-  else
-    printf '\033[31msome checks failed — see above\033[0m\n'
-    return 1
+    return 0
   fi
+
+  printf '\033[31msome checks failed — see above\033[0m\n'
+  # Auto-heal: re-run install.sh once to re-sync the managed tree and re-wire
+  # every detected harness, then re-check. This repairs the common drift cases
+  # (a deleted prompt file, a hook unwired by a settings.json edit, a partial
+  # sync) without the user reasoning about which step broke. Guarded by an env
+  # flag so the single recursive re-check can never loop.
+  if [ "$heal" = "1" ] && [ "$healed" != "1" ]; then
+    # Heal from the recorded source checkout when doctor is running out of the
+    # installed home (ROOT_DIR == FLYWHEEL_HOME, nothing to re-sync from itself);
+    # otherwise heal from this checkout directly.
+    local heal_src="$ROOT_DIR"
+    if [ -f "$FLYWHEEL_HOME/.source-checkout" ]; then
+      local recorded
+      recorded="$(cat "$FLYWHEEL_HOME/.source-checkout" 2>/dev/null || true)"
+      [ -n "$recorded" ] && [ -x "$recorded/install.sh" ] && heal_src="$recorded"
+    fi
+    if [ -x "$heal_src/install.sh" ]; then
+      echo
+      printf '\033[34m→\033[0m self-heal: re-running %s/install.sh\n' "$heal_src"
+      if [ "$heal_src" = "$FLYWHEEL_HOME" ]; then
+        printf '\033[33m⚠\033[0m heal source is the install home itself — re-wiring only; deleted managed files cannot be restored without the original checkout (run install.sh from it)\n'
+      fi
+      AGENT_FLYWHEEL_HOME="$FLYWHEEL_HOME" "$heal_src/install.sh" --home "$FLYWHEEL_HOME" || true
+      echo
+      printf '\033[34m→\033[0m self-heal: re-checking\n'
+      AGENT_FLYWHEEL_DOCTOR_HEALED=1 "$BIN_DIR/agent-flywheel" doctor
+      return $?
+    fi
+    printf '\033[33m⚠\033[0m self-heal requested but no usable install.sh found (checkout moved or deleted?) — reinstall from the repo\n'
+  fi
+  [ "$heal" = "1" ] && [ "$healed" = "1" ] && printf '\033[33m⚠\033[0m self-heal ran but checks still fail — see the failures above\n'
+  return 1
 }
 
 cmd_periodic_check() {
@@ -300,6 +376,34 @@ cmd_periodic_mark() {
 
 cmd_autotune() {
   node "$SCRIPTS_DIR/advisor-autotune.mjs" "$@"
+}
+
+cmd_self_improve() {
+  local repo="$ROOT_DIR" gate=0 mark=0 trigger="session-end"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --repo) repo="$2"; shift 2 ;;
+      --trigger) trigger="$2"; shift 2 ;;
+      --gate) gate=1; shift ;;
+      --mark) mark=1; shift ;;
+      --print) shift ;; # accepted for symmetry; the prompt is always printed
+      *) echo "unknown option: $1" >&2; return 2 ;;
+    esac
+  done
+  # --gate honors the configured cadence (mode/trigger/days/gap in config.env).
+  # Without --gate the meta pass is always printed — the manual on-demand path.
+  if [ "$gate" = "1" ] && ! flywheel_self_improve_due "$trigger"; then
+    echo "self-improve not due now per configured cadence (trigger=$trigger; see agent-flywheel memory / config.env) — skipping" >&2
+    return 1
+  fi
+  # The meta pass reads files (the flywheel checkout + ~/.agent-flywheel/*), not
+  # a resumable transcript — so this prints the assembled prompt for the current
+  # agent to follow inline or to pipe into any harness's headless invocation.
+  # There is deliberately no --resume spawn here: there is no prior session to
+  # resume, the subject is the loop itself.
+  flywheel_build_prompt self-improve "$repo" "The agent-flywheel repo checkout to assess is" "at"
+  [ "$mark" = "1" ] && flywheel_mark_self_improve_ran
+  return 0
 }
 
 main() {
@@ -316,6 +420,7 @@ main() {
     periodic-check) cmd_periodic_check "$@" ;;
     periodic-mark) cmd_periodic_mark "$@" ;;
     autotune) cmd_autotune "$@" ;;
+    self-improve) cmd_self_improve "$@" ;;
     version|--version|-v) echo "agent-flywheel $VERSION" ;;
     help|--help|-h) usage ;;
     *) echo "unknown subcommand: $sub" >&2; usage >&2; return 2 ;;

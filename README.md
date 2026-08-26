@@ -23,6 +23,31 @@ harness-agnostic version: the prompts and logic live in one place
 hook/event system to the same shared files — so the behavior is identical
 everywhere and never drifts into four slowly-diverging copies.
 
+## Prerequisites
+
+Zero required prerequisites beyond `bash`, `node`, and (Claude Code adapter
+only) `jq` — the loop runs standalone. The one thing worth setting up
+deliberately is **durable memory**, which is why it's documented as a
+first-class prerequisite in [`docs/prerequisites.md`](docs/prerequisites.md):
+
+- **Where memory lives (central, not per-project).** All state —
+  `MEMORY.md`, `GUARDRAILS.md`, `LEVEL.md`, `LEARN.log`, `SELF-IMPROVE.md` —
+  lives in one fixed directory, `~/.agent-flywheel` (override with
+  `AGENT_FLYWHEEL_HOME`), **independent of your working directory**. Changing
+  `cd` between projects never moves or splits it; a lesson learned in one repo
+  is read in every other. Point `AGENT_FLYWHEEL_HOME` at a synced folder to
+  share one memory across machines.
+- **memorix (recommended, optional).** When memorix (or claude-mem) is
+  reachable, it's the *primary* semantic store — cross-project, searchable, the
+  harness-agnostic memory this loop is built to cooperate with — and
+  `MEMORY.md` is still written as the always-portable baseline. Check which is
+  active with `agent-flywheel memory --status`.
+
+Full detail, per-harness setup, and the "used when present, fallback otherwise"
+skill table: [`docs/prerequisites.md`](docs/prerequisites.md). Prior-art and
+what's borrowed from Reflexion/CoALA/Voyager/MemGPT/Hermes:
+[`docs/prior-art.md`](docs/prior-art.md).
+
 ## Architecture
 
 ```
@@ -32,6 +57,9 @@ core/
     session-end.txt         reflection procedure run when a session ends
     periodic.txt            lightweight version run on an idle mid-session timer
     maturity-nudge.txt       first-turn habits nudge (spec-first, verify-gate, delegate)
+    self-improve.txt         META pass: the loop reflects on and improves ITSELF
+                              (its prompts, adapters, guardrail effectiveness,
+                              level trend, next-skill curriculum) + self-heal first
     reference/               fallback docs read by session-end.txt when the user's
                               own dedicated skill (skill-creator, learn-from-session,
                               level-up-coach, ...) isn't installed:
@@ -45,8 +73,16 @@ scripts/
   skill-scaffold.mjs        generic SKILL.md scaffolder + lister (skill new/list fallback)
 bin/
   agent-flywheel            universal CLI — see `agent-flywheel help` for the full list:
-                              nudge | prompt | reflect | skill new/list | log | memory |
-                              doctor | periodic-check | periodic-mark | autotune
+                              nudge | prompt | reflect | skill new/list | log |
+                              memory [--status] | doctor [--heal] | self-improve |
+                              periodic-check | periodic-mark | autotune
+.claude-plugin/             Claude Code plugin manifest (single-add install path)
+  plugin.json               plugin manifest (hooks + commands, points at core/)
+  marketplace.json          marketplace entry for `claude plugin marketplace add`
+hooks/hooks.json            plugin SessionStart/SessionEnd -> the same adapter scripts
+commands/                   slash commands: /flywheel-reflect, -nudge, -self-improve
+skills/                     bundled skill: flywheel-skill-lifecycle (spec->create->compact)
+config.env.example          cadence + memory-location config, seeded on install
 adapters/
   omp/                      extension (before_agent_start nudge, session hooks) + rules + config
   claude-code/               SessionStart/SessionEnd hooks + settings.json snippet
@@ -218,12 +254,58 @@ ad-hoc summarizing:
 
 ## Install
 
+Two ways in. The **plugin** is the single-add path for Claude Code; **`install.sh`**
+is the universal path that also wires omp and the CLI. They can coexist, but pick
+one per harness so a hook isn't registered twice (see "Avoiding double-wiring").
+
+### Option A — `install.sh` (all harnesses: omp, Claude Code, CLI)
+
 ```bash
 git clone https://github.com/abhishekgarg18/agent-flywheel.git
 cd agent-flywheel
 ./install.sh              # detect + wire every harness found on this machine
 ./install.sh --dry-run     # see what it would do first, without touching anything
+./install.sh --only omp    # or --only claude-code, to wire just one
 ```
+
+Also seeds `~/.agent-flywheel/config.env` from `config.env.example` (never
+overwrites an existing one), so cadence/memory config is ready to edit.
+
+### Option B — Claude Code plugin (single add, Claude Code only)
+
+Packages the same hooks + the same `core/` prompts as one installable plugin,
+plus three slash commands (`/flywheel-reflect`, `/flywheel-nudge`,
+`/flywheel-self-improve`) and the bundled `flywheel-skill-lifecycle` skill:
+
+```text
+/plugin marketplace add abhishekgarg18/agent-flywheel      # add this repo as a marketplace
+/plugin install agent-flywheel@agent-flywheel               # install the plugin
+# local checkout, for testing without installing:
+claude --plugin-dir /path/to/agent-flywheel
+```
+
+The plugin's hooks reference the same adapter scripts and `core/` prompts via
+`${CLAUDE_PLUGIN_ROOT}`, so there is no second copy of the logic. Durable state
+still lives in `~/.agent-flywheel`, shared with every other harness.
+
+### Self-heal and the meta pass
+
+- `agent-flywheel doctor --heal` re-syncs any deleted/corrupted managed file
+  from the recorded source checkout and re-wires every harness, then re-checks —
+  so drift in the loop's own wiring is repaired, not silently tolerated.
+- The loop improves **itself**, not only your sessions: on a configurable
+  cadence (default: at session-end, at most weekly) it runs the META pass in
+  `core/prompts/self-improve.txt` — auto-heal, then assess its own prompts,
+  guardrail effectiveness, level trend, and next-skill curriculum. Tune when it
+  fires in `config.env` (see [Configuration](#configuration)).
+
+### Avoiding double-wiring
+
+If you already have another self-improvement/reflection loop wired into a
+harness (your own SessionStart/SessionEnd hooks, or a prior manual wiring),
+remove it before installing agent-flywheel into that harness, or both will fire
+a reflection pass on every session. `./uninstall.sh` removes agent-flywheel's
+own wiring cleanly; a pre-existing loop from another source you remove by hand.
 
 `install.sh` syncs this repo to `~/.agent-flywheel` and then, for each
 harness it detects:
@@ -246,10 +328,52 @@ safe.
 ./uninstall.sh --purge      # also delete ~/.agent-flywheel entirely
 ```
 
+## Session boundaries per harness
+
+The loop must fire on every way a session can end — and those differ per
+harness. Both fully-supported harnesses are covered:
+
+| Close path | omp | Claude Code |
+|---|---|---|
+| **Normal end / exit** (Ctrl-D, `/exit`, close terminal) | `session_shutdown` → reflection pass | `SessionEnd` (reason `exit`/`logout`) → reflection pass |
+| **`/new`** (start a fresh session) | `session_switch` (reason `new`, carries previous session file) → reflection pass on the previous session | `SessionEnd` (reason `clear`) on the old session, then `SessionStart` re-arms | 
+| **`/clear`** | no lifecycle event (in-place marker only) — nothing to hook, by design of omp's event model | `SessionEnd` (reason `clear`) → reflection pass, then `SessionStart` re-injects the nudge |
+| **First turn** | `before_agent_start` → maturity nudge + active guardrails | `SessionStart` `additionalContext` → maturity nudge + active guardrails |
+| **Idle mid-session** | `ctx.setInterval` idle checkpoint (config-driven) | detached `periodic-watcher.sh` (config-driven) |
+
+Every path spawns a **detached** reflection subprocess (no hook can force "one
+more turn" in a closing session) guarded by `AGENT_FLYWHEEL_PASS=1` against
+recursive self-spawn. omp's `/clear` intentionally has no hook because omp emits
+no event for it; on Claude Code `/clear` does fire `SessionEnd`, so it's covered
+there. Both read the same `config.env` for cadence, so tuning applies uniformly.
+
+## Configuration
+
+Everything has a working default; `install.sh` seeds
+`~/.agent-flywheel/config.env` from [`config.env.example`](config.env.example)
+(never overwriting an existing one). Precedence: a shell env var of the same
+name → `config.env` → the built-in default. Full reference:
+[`docs/configuration.md`](docs/configuration.md).
+
+Most-tuned knob — **when the meta self-improvement pass fires**:
+
+| `AGENT_FLYWHEEL_SELF_IMPROVE_MODE` | Effect |
+|---|---|
+| `every-session` | run the meta pass at every eligible trigger |
+| `gap` *(default)* | at most once per `…_GAP_DAYS` (default 7) |
+| `days` | only on `…_DAYS` (e.g. `Sat,Sun`, or `1,4`) |
+| `off` | never auto-run — manual `agent-flywheel self-improve` only |
+
+`AGENT_FLYWHEEL_SELF_IMPROVE_TRIGGER` = `session-end` (default) / `mid-session` /
+`both` chooses which point may run it. Periodic-checkpoint timing
+(`…_PERIODIC_CHECK_SECONDS`, `…_IDLE_SECONDS`, `…_MIN_PERIODIC_GAP_SECONDS`) is
+read by both harnesses. Verify with `agent-flywheel self-improve --gate; echo $?`
+(0 = due now) and `agent-flywheel memory --status`.
+
 ## Testing
 
 ```bash
-node --test                        # unit tests: advisor-autotune.mjs, idle-gap.mjs, skill-scaffold.mjs, reflect --print dispatch per harness
+node --test                        # unit tests: advisor-autotune, idle-gap, skill-scaffold, reflect --print dispatch, self-improve cadence gate, install-preserves-state
 ./tests/install-idempotency.sh     # sandboxed install/uninstall smoke test, incl. doctor + reflect --print (never touches your real config)
 shellcheck adapters/*/hooks/*.sh core/lib.sh install.sh uninstall.sh bin/agent-flywheel --exclude=SC1091
 ```

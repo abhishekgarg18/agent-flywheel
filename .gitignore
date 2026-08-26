@@ -11,5 +11,19 @@ node_modules/
 # Never commit a real installed state accidentally copied into the repo
 .agent-flywheel/
 .last-periodic-reflection
+.last-self-improve
+.source-checkout
 advisor-autotune.log
 advisor-autotune-decisions.log
+reflection.log
+# Runtime memory/ledgers (only ever live in ~/.agent-flywheel; guard anyway).
+# NOTE: config.env.example IS tracked; a real config.env is not.
+/MEMORY.md
+/GUARDRAILS.md
+/LEVEL.md
+/LEARN.log
+/SELF-IMPROVE.md
+/config.env
+
+# do-task orchestrator artifacts (spec/plan/verify for work ON this repo)
+.do-task/

@@ -1,0 +1,26 @@
+{
+  "_comment": "Claude Code plugin hooks. These register the SAME adapter scripts install.sh would wire into ~/.claude/settings.json — the plugin path is just the single-add alternative. ${CLAUDE_PLUGIN_ROOT} resolves to this plugin's own install dir, so the scripts find core/lib.sh and core/prompts/* next to them exactly as in the checkout (single source of truth, no duplication). Durable output (MEMORY.md, LEARN.log, reflection.log) still goes to ~/.agent-flywheel via $AGENT_FLYWHEEL_HOME, shared across every harness.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/adapters/claude-code/hooks/session-start.sh\""
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/adapters/claude-code/hooks/session-end.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

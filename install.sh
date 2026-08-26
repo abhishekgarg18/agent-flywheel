@@ -67,15 +67,38 @@ sync_repo() {
     return 0
   fi
   mkdir -p "$FLYWHEEL_HOME"
+  # RUNTIME STATE that lives in FLYWHEEL_HOME but is NOT in the source tree — the
+  # user's accumulated memory and this install's markers. These MUST survive a
+  # re-sync: a --delete that removed them would silently wipe the whole point of
+  # the loop (every past lesson) on a routine `git pull && ./install.sh`. Every
+  # entry here is protected from --delete (rsync) and from the tar-fallback wipe.
+  local protect=(
+    'MEMORY.md' 'GUARDRAILS.md' 'LEVEL.md' 'LEARN.log' 'SELF-IMPROVE.md'
+    'config.env' 'reflection.log' 'advisor-autotune.log'
+    '.last-periodic-reflection' '.last-self-improve' '.source-checkout' 'watchers'
+  )
   if command -v rsync >/dev/null 2>&1; then
-    rsync -a --delete --exclude '.git' --exclude 'tests' --exclude 'node_modules' \
-      "$ROOT_DIR"/ "$FLYWHEEL_HOME"/
+    local excludes=(--exclude '.git' --exclude 'tests' --exclude 'node_modules')
+    local p
+    for p in "${protect[@]}"; do excludes+=(--exclude "$p"); done
+    rsync -a --delete "${excludes[@]}" "$ROOT_DIR"/ "$FLYWHEEL_HOME"/
   else
-    find "$FLYWHEEL_HOME" -mindepth 1 -not -name '.last-periodic-reflection' -not -name 'advisor-autotune.log' -delete 2>/dev/null || true
+    # Wipe managed files but keep every protected state entry (bash 3.2: build a
+    # find predicate, no associative arrays / mapfile).
+    local prune=()
+    for p in "${protect[@]}"; do prune+=(-not -name "$p"); done
+    find "$FLYWHEEL_HOME" -mindepth 1 -maxdepth 1 "${prune[@]}" -exec rm -rf {} + 2>/dev/null || true
     (cd "$ROOT_DIR" && tar cf - --exclude='.git' --exclude='tests' --exclude='node_modules' .) | (cd "$FLYWHEEL_HOME" && tar xf -)
   fi
   chmod +x "$FLYWHEEL_HOME/bin/agent-flywheel" \
     "$FLYWHEEL_HOME"/adapters/*/hooks/*.sh 2>/dev/null || true
+  # Record the source checkout so `agent-flywheel doctor --heal`, invoked later
+  # as $FLYWHEEL_HOME/bin/agent-flywheel (where its own ROOT_DIR == FLYWHEEL_HOME
+  # and thus has nothing to re-sync from), can find the real checkout to restore
+  # deleted/corrupted managed files from. Skipped when installing in place.
+  if [ "$ROOT_DIR" != "$FLYWHEEL_HOME" ]; then
+    printf '%s\n' "$ROOT_DIR" > "$FLYWHEEL_HOME/.source-checkout"
+  fi
   ok "Synced to $FLYWHEEL_HOME"
 }
 

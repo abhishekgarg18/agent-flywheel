@@ -1,0 +1,23 @@
+{
+  "name": "agent-flywheel",
+  "version": "0.2.0",
+  "description": "Harness-agnostic reflect -> write -> proceduralize self-improvement loop: automatic session-end reflection, first-turn maturity nudge, periodic mid-session checkpoint, and a weekly meta pass that improves the loop itself.",
+  "author": {
+    "name": "Abhishek Garg"
+  },
+  "homepage": "https://github.com/abhishekgarg18/agent-flywheel",
+  "repository": "https://github.com/abhishekgarg18/agent-flywheel",
+  "license": "MIT",
+  "keywords": [
+    "self-improvement",
+    "reflection",
+    "memory",
+    "skills",
+    "guardrails",
+    "hooks",
+    "reflexion",
+    "coala"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "commands": "./commands"
+}

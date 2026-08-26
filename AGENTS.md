@@ -63,6 +63,35 @@ by inspection when touching either.
   Don't add an auto-wire step to `install.sh` for them without first
   verifying the actual hook contract (see `adapters/codex/notes.md` /
   `adapters/copilot/notes.md` for exactly what's unverified).
+- **Never `--delete` user state on re-sync.** `install.sh`'s `sync_repo`
+  syncs the repo INTO `FLYWHEEL_HOME`, the same dir that holds the user's
+  accumulated `MEMORY.md`/`GUARDRAILS.md`/`LEVEL.md`/`LEARN.log`/
+  `SELF-IMPROVE.md`/`config.env`/cadence markers/`watchers/`. The `protect`
+  array in `sync_repo` excludes every one of these from both the rsync
+  `--delete` and the tar-fallback wipe — a re-install that removed them would
+  destroy the whole point of the loop. **Any new runtime-state file MUST be
+  added to that `protect` list** (and it's pinned by
+  `tests/install-preserves-state.test.mjs`).
+- **Cadence has one source of truth: `flywheel_self_improve_due` (core/lib.sh).**
+  The session-end/periodic prompts decide "is the meta pass due now" by calling
+  `agent-flywheel self-improve --gate --trigger <pt>`, never by hardcoding a
+  schedule in prompt text. Config precedence is env var > `config.env` >
+  built-in default (`flywheel_load_config` only sets a key the environment
+  hasn't already set). New config keys read via `${VAR:-default}` getters.
+- **The Claude Code plugin mirrors, never forks.** `.claude-plugin/`,
+  `hooks/hooks.json`, `commands/*.md`, and `skills/` reference the same
+  `core/` prompts and `adapters/claude-code/hooks/*.sh` via
+  `${CLAUDE_PLUGIN_ROOT}` — exactly the single-source rule the adapters follow.
+  A command that copied prompt text instead of `@${CLAUDE_PLUGIN_ROOT}/core/...`
+  would be a second drifting copy; fix `core/` once.
+- **`usage()` slices dynamically** (line 2 → the line before the first `set -`),
+  so adding/removing a subcommand's header doc block can't desync `help`. Keep
+  each subcommand's doc block in that header comment, not a separate string.
+- **The meta layer is `core/prompts/self-improve.txt` + `doctor --heal`.** The
+  loop reflects on itself (its own prompts/adapters/effectiveness) and repairs
+  its own wiring from the recorded `.source-checkout`. `doctor --heal` re-runs
+  `install.sh` from that checkout when run out of the installed home (where its
+  own `ROOT_DIR == FLYWHEEL_HOME` and thus has nothing to re-sync from itself).
 
 ## Conventions
 
