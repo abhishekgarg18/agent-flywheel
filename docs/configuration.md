@@ -71,6 +71,21 @@ Examples:
   events, so for a true wall-clock schedule, set `MODE=off` and add a cron/launchd
   job: `0 9 * * * ~/.agent-flywheel/bin/agent-flywheel self-improve --mark | <your-harness-headless-invocation>`.
 
+### Session-start primers (resume context injected with the nudge)
+
+So agent-flywheel can fully replace a hand-rolled session-start hook, the
+first-turn nudge can also surface resume context. Both default ON when the
+resource is present:
+
+| Key | Default | Effect |
+|---|---|---|
+| `AGENT_FLYWHEEL_NUDGE_HANDOFF` | `1` | surface the newest `*.md` handoff to resume from |
+| `AGENT_FLYWHEEL_HANDOFFS_DIR` | `~/.claude/handoffs` | where handoffs live |
+| `AGENT_FLYWHEEL_NUDGE_MEMORIX` | `1` | inject the memorix Workset (per-project brief: start-here files, reliable memories, cautions, git facts) when the `memorix` CLI is present |
+
+Set either to `0` to suppress. The memorix Workset is the same
+`memorix context … --brief-json` bundle a manual session-start hook would emit.
+
 ### The periodic mid-session checkpoint (lightweight reflection while idle)
 
 | Key | Default | Effect |

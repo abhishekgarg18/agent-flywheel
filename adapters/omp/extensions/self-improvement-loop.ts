@@ -91,6 +91,24 @@ function readConfigSeconds(key: string, fallbackMs: number): number {
 const PERIODIC_CHECK_MS = readConfigSeconds("AGENT_FLYWHEEL_PERIODIC_CHECK_SECONDS", DEFAULT_PERIODIC_CHECK_MS);
 const MIN_PERIODIC_GAP_MS = readConfigSeconds("AGENT_FLYWHEEL_MIN_PERIODIC_GAP_SECONDS", DEFAULT_MIN_PERIODIC_GAP_MS);
 
+// String config reader (env var wins over config.env, same precedence as the
+// bash side) for the session-start primer flags.
+function readConfigStr(key: string, fallback: string): string {
+  const envVal = process.env[key];
+  if (envVal !== undefined && envVal !== "") return envVal;
+  try {
+    for (const line of readFileSync(CONFIG_FILE, "utf8").split("\n")) {
+      const t = line.trim();
+      if (!t || t.startsWith("#") || !t.startsWith(key + "=")) continue;
+      const v = t.slice(key.length + 1).trim();
+      if (v) return v;
+    }
+  } catch {
+    // no config file: use fallback
+  }
+  return fallback;
+}
+
 export default function selfImprovementLoop(pi: ExtensionAPI): void {
   let firstTurnSeen = false;
   let periodicTimerArmed = false;
@@ -223,6 +241,37 @@ export default function selfImprovementLoop(pi: ExtensionAPI): void {
       const last = lines[lines.length - 1];
       if (last) {
         nudgeText += `\n\nLast self-scored level: ${last} (see ${LEVEL_FILE} for trend)`;
+      }
+    }
+
+    // Session-start primers (parity with bash flywheel_render_session_primers):
+    // latest handoff + memorix Workset, config-gated, best-effort.
+    if (readConfigStr("AGENT_FLYWHEEL_NUDGE_HANDOFF", "1") !== "0") {
+      let hd = readConfigStr("AGENT_FLYWHEEL_HANDOFFS_DIR", join(homedir(), ".claude", "handoffs"));
+      if (hd === "~") hd = homedir();
+      else if (hd.startsWith("~/")) hd = join(homedir(), hd.slice(2));
+      try {
+        const latest = readdirSync(hd)
+          .filter((f) => f.endsWith(".md"))
+          .map((f) => ({ f, m: statSync(join(hd, f)).mtimeMs }))
+          .sort((a, b) => b.m - a.m)[0];
+        if (latest) nudgeText += `\n\nLatest handoff: ${join(hd, latest.f)} — read it to resume prior work before starting this session.`;
+      } catch {
+        // no handoffs dir: skip
+      }
+    }
+    if (readConfigStr("AGENT_FLYWHEEL_NUDGE_MEMORIX", "1") !== "0") {
+      try {
+        const r = spawnSync("memorix", ["context", `resume work in ${basename(process.cwd())}`, "--fallback", "--brief-json"], {
+          encoding: "utf8",
+          timeout: 5000,
+        });
+        const brief = (r.stdout || "").trim();
+        if (r.status === 0 && brief && brief !== "null") {
+          nudgeText += `\n\n[memory] memorix Workset for this project:\n${brief}`;
+        }
+      } catch {
+        // memorix not present / errored: skip
       }
     }
 

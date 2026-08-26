@@ -124,6 +124,40 @@ flywheel_render_nudge() {
     last="$(tail -1 "$level_file" 2>/dev/null || true)"
     [ -n "$last" ] && printf '\nLast self-scored level: %s (see %s for trend)\n' "$last" "$level_file"
   fi
+
+  flywheel_render_session_primers
+}
+
+# Optional session-start primers, appended to the nudge: the latest handoff to
+# resume from, and the memorix Workset for this project. Both are best-effort and
+# config-gated (default ON when the resource is present) — they let agent-flywheel
+# be a superset of a hand-rolled session-start hook without hardcoding either.
+#   AGENT_FLYWHEEL_NUDGE_HANDOFF=0   disable the handoff pointer
+#   AGENT_FLYWHEEL_HANDOFFS_DIR=...  where handoffs live (default ~/.claude/handoffs)
+#   AGENT_FLYWHEEL_NUDGE_MEMORIX=0   disable the memorix Workset brief
+flywheel_render_session_primers() {
+  local handoffs_dir latest brief
+  if [ "${AGENT_FLYWHEEL_NUDGE_HANDOFF:-1}" = "1" ]; then
+    handoffs_dir="${AGENT_FLYWHEEL_HANDOFFS_DIR:-$HOME/.claude/handoffs}"
+    # config.env assigns literally, so expand a leading ~ / ~/ ourselves. The
+    # "~" patterns are intentionally literal (matching an unexpanded value), not
+    # an attempt to expand a tilde in quotes — hence the SC2088 disable.
+    # shellcheck disable=SC2088
+    case "$handoffs_dir" in "~") handoffs_dir="$HOME" ;; "~/"*) handoffs_dir="$HOME/${handoffs_dir#~/}" ;; esac
+    if [ -d "$handoffs_dir" ]; then
+      # ls -t is the intended "newest first"; filenames here are our own dated
+      # handoff files, no non-alphanumeric edge cases to warrant find+sort.
+      # shellcheck disable=SC2012
+      latest="$(ls -t "$handoffs_dir"/*.md 2>/dev/null | head -1)"
+      [ -n "$latest" ] && printf '\nLatest handoff: %s — read it to resume prior work before starting this session.\n' "$latest"
+    fi
+  fi
+  if [ "${AGENT_FLYWHEEL_NUDGE_MEMORIX:-1}" = "1" ] && command -v memorix >/dev/null 2>&1; then
+    brief="$(memorix context "resume work in $(basename "$PWD")" --fallback --brief-json 2>/dev/null || true)"
+    if [ -n "$brief" ] && [ "$brief" != "null" ]; then
+      printf '\n[memory] memorix Workset for this project:\n%s\n' "$brief"
+    fi
+  fi
 }
 
 # Every root this project knows to check under CHECK-EXISTING before

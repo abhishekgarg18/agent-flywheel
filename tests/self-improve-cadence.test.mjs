@@ -104,6 +104,19 @@ test("self-improve without --gate always prints the meta prompt with the repo lo
   assert.doesNotMatch(r.stdout, /despite --resume/); // meta pass never resumes a session
 });
 
+test("nudge surfaces the latest handoff, and the off-switch suppresses it", () => {
+  const handoffs = mkdtempSync(join(tmpdir(), "af-handoffs-"));
+  writeFileSync(join(handoffs, "session-a.md"), "# handoff a\n");
+  // Keep memorix off so the test is fast and deterministic regardless of machine.
+  const baseEnv = { AGENT_FLYWHEEL_HANDOFFS_DIR: handoffs, AGENT_FLYWHEEL_NUDGE_MEMORIX: "0" };
+  const on = run(["nudge"], { home: freshHome(), env: baseEnv });
+  assert.equal(on.status, 0);
+  assert.match(on.stdout, /Latest handoff:/);
+  assert.match(on.stdout, /session-a\.md/);
+  const off = run(["nudge"], { home: freshHome(), env: { ...baseEnv, AGENT_FLYWHEEL_NUDGE_HANDOFF: "0" } });
+  assert.doesNotMatch(off.stdout, /Latest handoff:/);
+});
+
 test("memory --status always reports the flat-file baseline pointing at MEMORY.md", () => {
   const home = freshHome();
   const r = run(["memory", "--status"], { home });
