@@ -161,6 +161,12 @@ find . -name "*.sh" -not -path "./.git/*" -print0 | xargs -0 -n1 bash -n && bash
 All four run in CI (`.github/workflows/ci.yml`) on every push/PR — run them
 locally before claiming a change is done.
 
+**Testing install.sh: sandbox HOME, not just `--home`.** `--home`/`FLYWHEEL_HOME`
+only redirects the synced tree; `wire_claude_code`/`wire_omp` always write to the
+real `$HOME/.claude` / `$HOME/.omp`. A manual test run without `HOME=<tmp>` will
+pollute your live config (`tests/install-idempotency.sh` sets a sandbox HOME —
+mirror that: `HOME=$(mktemp -d) AGENT_FLYWHEEL_HOME=$HOME/.agent-flywheel ./install.sh`).
+
 ## Where decisions are recorded
 
 Non-obvious architecture decisions (why detached-spawn instead of a
