@@ -12,6 +12,19 @@ stage below has a standalone fallback — but prefer the dedicated tool over the
 is installed and reachable, rather than running both. Feel free to use, extend, or create any skill
 this stage needs; nothing here is meant to gate you away from a skill you already have.
 
+"Installed" below is NOT a judgment call: a line near the end of this prompt, `DETECTED (computed
+by the hook before this pass started, not a judgment call — treat 'no' as authoritative, do not
+re-check): task-observer=yes/no skill-creator=yes/no skill-compactor=yes/no
+learn-from-session=yes/no level-up-coach=yes/no`, was computed by the hook itself (a directory
+existence check) before you ever started — go by that line, not by memory of an earlier pass or a
+guess. (memorix/claude-mem reachability isn't in that line — that one genuinely does depend on which
+MCP tools/CLIs are reachable in THIS session, so check it directly.) When the DETECTED line says
+`=yes` for a stage's dedicated tool, use ONLY it for that stage — writing to both is the specific
+failure this note exists to prevent, not a safe redundancy (this already happened once: the
+`~/.agent-flywheel/GUARDRAILS.md` fallback kept accumulating entries in parallel with
+`learn-from-session` for multiple passes after it was installed, because "if installed" used to be a
+self-check a pass could skip).
+
 This is the full pipeline (Reflexion/CoALA-grounded — episodic scan, semantic write, procedural write, decay — plus the skill-lifecycle and self-scoring stages below). Follow every stage in order; a stage with nothing to do is a valid, expected outcome — say so and move on, never pad it.
 
 1. SCAN (episodic). Reread what happened this session: mistakes made and corrected, non-obvious facts discovered about this codebase/environment, explicit user preferences or corrections stated (especially anything marked as an interjection/override), repeatable procedures used more than once, and any friction (fighting the tool, guessing wrong, redoing work) a future session would hit again. If `task-observer` is installed, its own logging convention/location takes over this stage.
@@ -21,20 +34,21 @@ This is the full pipeline (Reflexion/CoALA-grounded — episodic scan, semantic 
    - A durable convention/boundary/command specific to THIS repo that every agent (any harness, any contributor) working here should follow → PROJECT-RULE (step 3, second half): record it in the project's own AGENTS.md/CLAUDE.md, not only your personal store. This is how the harness learns at the project level.
    - The user explicitly corrected a specific behavior, or a mistake a prior guardrail already warned about recurred → GUARDRAILS (step 4).
    - The same multi-step workflow ran 3+ times (this session or per MEMORY.md history), or clearly will recur, and nothing already covers it → SKILL (step 5).
+   - An EXISTING skill's own instructions were followed and turned out wrong, stale (references a removed file/flag/path), or caused an avoidable error while working → SKILL (step 5), classified UPDATE. Don't wait for a 3x recurrence here — the defect is in the skill itself, not in a workflow pattern that needs repetition to prove out.
    Reject anything that's just a play-by-play of this session's specific files/lines/output with no generalizable lesson. If nothing qualifies anywhere, that is correct — do not invent content to pad a report.
 
 3. MEMORY (semantic) + PROJECT-RULE. First DECIDE THE LEVEL of each accepted insight — GLOBAL (applies to how you work across every repo) vs PROJECT (applies to anyone in THIS repo). See `core/prompts/reference/project-rules.txt`; when unsure prefer the narrower project level.
    GLOBAL/MEMORY: if `memorix` (or `claude-mem`) tools are reachable, use them as the PRIMARY store for every MEMORY-class insight — call its store operation as for any user-requested memory. ALWAYS ALSO append the same insight as one dated bullet to `~/.agent-flywheel/MEMORY.md` (create with a one-line header if absent) regardless of whether memorix is present — the zero-dependency baseline that works on any machine/harness/project. A global "always/never do X" habit may also belong in your global agent-instructions file (e.g. ~/.claude/CLAUDE.md) if you keep one.
    PROJECT-RULE: for a durable convention/boundary/command specific to THIS repo, record it in the project's OWN agent-instructions file (AGENTS.md/CLAUDE.md "Learned rules" section, or the repo's existing conventions section) following `core/prompts/reference/project-rules.txt` — so every agent and contributor who opens the repo inherits it, not just your personal store. Read the section first and sharpen an existing rule in place rather than duplicating; leave a non-trivial change for the human to commit.
 
-4. GUARDRAILS (binding corrections). For each GUARDRAILS-class item: if `learn-from-session` is installed, follow its own guardrail-file convention and location instead. Otherwise read `core/prompts/reference/guardrails-format.txt` (next to this file) and follow it exactly — numbered ledger at `~/.agent-flywheel/GUARDRAILS.md`, binding starting the next opportunity to apply it, not merely logged for later.
+4. GUARDRAILS (binding corrections). Check the DETECTED line for `learn-from-session` FIRST, before touching either file. `=yes`: use ONLY its own guardrail-file convention and location (its `SKILL.md` + `references/learned-rules.md`, or equivalent) for every GUARDRAILS-class item this pass — do not write to `~/.agent-flywheel/GUARDRAILS.md` at all in that case. `=no`: read `core/prompts/reference/guardrails-format.txt` (next to this file) and follow it exactly — numbered ledger at `~/.agent-flywheel/GUARDRAILS.md`, binding starting the next opportunity to apply it, not merely logged for later.
 
 5. SKILL (procedural memory, lifecycle). For each SKILL-class item:
    a. CHECK-EXISTING — read `core/prompts/reference/skill-roots.txt` and follow its procedure (or run `agent-flywheel skill list`) before building anything. A match → UPDATE; nothing → CREATE.
-   b. If `skill-creator` is installed, prefer it for CREATE. Otherwise read `core/prompts/reference/skill-authoring.txt` and follow the matching UPDATE or CREATE procedure (or run `agent-flywheel skill new`).
-   c. COMPACT — mandatory immediately after step (b). If `skill-compactor` is installed, invoke it. Otherwise apply the COMPACT section of `skill-authoring.txt`. Never skip this because the skill "looks fine already."
+   b. Check the DETECTED line for `skill-creator`. `=yes`: prefer it for CREATE. `=no`: read `core/prompts/reference/skill-authoring.txt` and follow the matching UPDATE or CREATE procedure (or run `agent-flywheel skill new`).
+   c. COMPACT — mandatory immediately after step (b). Check the DETECTED line for `skill-compactor`. `=yes`: invoke it. `=no`: apply the COMPACT section of `skill-authoring.txt`. Never skip this because the skill "looks fine already."
 
-6. LEVEL (self-score, this trigger only — skip entirely on a periodic/mid-session pass). If `level-up-coach` is installed, prefer its rubric/routing. Otherwise read `core/prompts/reference/level-rubric.txt` and follow it: score this session, append one line to `~/.agent-flywheel/LEVEL.md`.
+6. LEVEL (self-score, this trigger only — skip entirely on a periodic/mid-session pass). Check the DETECTED line for `level-up-coach`. `=yes`: prefer its rubric/routing. `=no`: read `core/prompts/reference/level-rubric.txt` and follow it: score this session, append one line to `~/.agent-flywheel/LEVEL.md`.
 
 7. DECAY. If anything learned this pass (in MEMORY, GUARDRAILS, or a skill) contradicts or obsoletes an existing entry, correct or remove the stale one in place rather than appending a second, contradicting entry anywhere — in memorix AND in MEMORY.md if both are in use. Stale memory is worse than no memory.
 

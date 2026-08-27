@@ -103,10 +103,21 @@ by inspection when touching either.
   its own wiring from the recorded `.source-checkout`. `doctor --heal` re-runs
   `install.sh` from that checkout when run out of the installed home (where its
   own `ROOT_DIR == FLYWHEEL_HOME` and thus has nothing to re-sync from itself).
-  The meta pass is **propose-only for anything that changes future behavior** —
-  it must never auto-edit a live/installed prompt/adapter copy (no diff, no
-  test, no review); it writes proposals to `SELF-IMPROVE.md`. Enforced by prose
-  in `self-improve.txt`, not code — keep it that way.
+  The meta pass's apply mode is a **config.env setting**
+  (`AGENT_FLYWHEEL_SELF_IMPROVE_APPLY_MODE=propose|auto-apply`, default
+  `propose`), not a hardcoded behavior — a fresh install gets the safe
+  propose-only gate; a user opts into `auto-apply` explicitly in their own
+  `config.env`. The hook computes which mode is active (`flywheel_lib.sh`'s
+  `flywheel_self_improve_apply_note`, deterministic — not left for the LLM to
+  "check config" itself, the same class of bug the GUARDRAILS detection fix
+  addressed) and hands it to the prompt as a fact. In `auto-apply` mode the
+  pass edits `core/prompts/*.txt` directly in the SOURCE checkout, runs
+  `doctor` to verify wiring, and `git commit`s the change (no push) so a bad
+  auto-edit is a `git revert`, not silent unrecoverable drift. Either mode
+  only ever touches the source checkout, never the *installed*
+  `~/.agent-flywheel` copy directly — `doctor --heal`/install.sh syncs that
+  out to every harness. Enforced by prose in `self-improve.txt` + the config
+  fact from `lib.sh`, not code that blocks the edit — keep it that way.
 - **`flywheel_load_config` is a security boundary, not a convenience parser.**
   It runs at source time on every hook. The key is used in an indirect
   expansion, so it MUST stay eval-free with the strict `*[!A-Za-z0-9_]*`

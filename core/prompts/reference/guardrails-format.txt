@@ -17,8 +17,13 @@ Format — one entry per rule, append-only except DECAY corrections:
   changes behavior next time, no need to re-read the session that produced it>
   _(context: <one line — repo/task where this was learned>)_
 
-Numbering: read the file first, use the next unused N — never renumber existing entries (other
-context may reference "G14" by number).
+Numbering: immediately before writing — not from memory of a number used earlier this pass or in a
+prior session — re-read the file fresh, e.g.:
+  grep -o '^### G[0-9]*' ~/.agent-flywheel/GUARDRAILS.md | sed 's/G//' | sort -n | tail -1
+Use that true highest N, plus 1. Never renumber existing entries (other context may reference "G14"
+by number). A remembered/assumed number is exactly how this file has already collided twice
+(two unrelated rules each written as "G10", two more each written as "G11") — treat that as a live
+example of the failure mode this line exists to prevent, not a hypothetical.
 
 BINDING IMMEDIATELY, not just logged: a guardrail flagged this pass is binding starting the very
 next opportunity to apply it — this session if it recurs before ending (periodic pass), or next

@@ -83,6 +83,23 @@ flywheel_cli_note() {
   printf 'agent-flywheel CLI for this install: %s — use this exact path for any agent-flywheel command referenced above; it is NOT assumed to be on PATH in this reflection subprocess.' "$(flywheel_cli_path)"
 }
 
+# Deterministic fact for the META pass's apply-mode branch — computed HERE, by
+# the hook, before the pass ever starts, not left for the LLM to "check
+# config" itself. A soft "if the user opted in, do X" prompt instruction is
+# exactly the failure class this project already hit once (the GUARDRAILS
+# fallback kept writing in parallel with `learn-from-session` because "if
+# installed" was a judgment call, not a checked fact — see the numbering fix
+# in guardrails-format.txt). Requires flywheel_load_config to have already run
+# in the caller so AGENT_FLYWHEEL_SELF_IMPROVE_APPLY_MODE is set from
+# config.env if present; default is the safe "propose" behavior.
+flywheel_self_improve_apply_note() {
+  local mode="${AGENT_FLYWHEEL_SELF_IMPROVE_APPLY_MODE:-propose}"
+  case "$mode" in
+    auto-apply) printf 'SELF_IMPROVE_APPLY_MODE=auto-apply (set explicitly in this install'"'"'s config.env)' ;;
+    *) printf 'SELF_IMPROVE_APPLY_MODE=propose (this install'"'"'s config.env default)' ;;
+  esac
+}
+
 flywheel_reflection_log() {
   echo "$FLYWHEEL_HOME/reflection.log"
 }
@@ -239,6 +256,36 @@ flywheel_detected_harness_clis() {
   return 0
 }
 
+# Deterministic "is this skill installed" facts for the prerequisite-skill
+# checks in session-end.txt/periodic.txt — computed HERE, by the hook, once
+# per pass, so the reflection pass never has to "go check for yourself" as a
+# judgment call. A prompt instruction to self-check is skippable (this is
+# exactly how the GUARDRAILS fallback kept firing in parallel with
+# `learn-from-session` after it was installed — see guardrails-format.txt's
+# numbering-collision fix); a fact handed to the pass before it starts is
+# not. Roots match core/prompts/reference/skill-roots.txt.
+flywheel_skill_present() {
+  local name="$1" root
+  for root in "$HOME/.claude/skills" "$HOME/.codex/skills" \
+              "$HOME/.omp/agent/managed-skills" "$HOME/.omp/agent/skills"; do
+    if [ -d "$root/$name" ]; then
+      echo yes
+      return 0
+    fi
+  done
+  echo no
+}
+
+flywheel_skill_facts_note() {
+  local names="task-observer skill-creator skill-compactor learn-from-session level-up-coach"
+  local line="DETECTED (computed by the hook before this pass started, not a judgment call — treat 'no' as authoritative, do not re-check):"
+  local n
+  for n in $names; do
+    line="$line $n=$(flywheel_skill_present "$n")"
+  done
+  printf '%s' "$line"
+}
+
 # Assembles the full prompt text for a trigger + session, identically to
 # what every adapter builds inline — single source of truth so
 # `agent-flywheel reflect`/`prompt` never drifts from what the hooks do.
@@ -264,6 +311,22 @@ flywheel_build_prompt() {
   # Hand the pass the exact CLI path so any `agent-flywheel ...` command in the
   # prompt (meta gate, doctor --heal) works on any channel without PATH.
   printf '\n%s\n' "$(flywheel_cli_note)"
+  # session-end/periodic only: hand them the deterministic skill-presence
+  # facts (see flywheel_skill_facts_note) instead of leaving "is X installed"
+  # to the pass's own judgment.
+  if [ "$trigger" = "session-end" ] || [ "$trigger" = "periodic" ]; then
+    printf '\n%s\n' "$(flywheel_skill_facts_note)"
+  fi
+  # self-improve only: hand it the deterministic apply-mode fact (see
+  # flywheel_self_improve_apply_note) so it never has to infer or assume it.
+  # NOTE: must be an if/fi, not a bare `[ ... ] && cmd` — that idiom returns
+  # the test's (false) exit status as the FUNCTION's return when trigger !=
+  # self-improve, which every `set -e` caller (bin/agent-flywheel) then
+  # treats as this function having failed. `if` with no `else` always
+  # returns 0 on a false condition.
+  if [ "$trigger" = "self-improve" ]; then
+    printf '\n%s\n' "$(flywheel_self_improve_apply_note)"
+  fi
 }
 
 flywheel_scripts_dir() {
