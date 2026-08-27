@@ -23,6 +23,58 @@ harness-agnostic version: the prompts and logic live in one place
 hook/event system to the same shared files — so the behavior is identical
 everywhere and never drifts into four slowly-diverging copies.
 
+## The exact workflow you're running
+
+```
+┌─ SESSION ENDS / IDLE TIMEOUT / MANUAL TRIGGER ──────────────────────────┐
+│ Every harness (omp, Claude Code, Codex, Copilot) fires the same loop    │
+└────────────────────────────┬─────────────────────────────────────────────┘
+                             ↓
+┌─ SCAN (episodic) ──────────────────────────────────────────────────────┐
+│ Reread what happened in this session                                   │
+│ → friction points, patterns, corrections, preferences                  │
+└────────────────────────────┬─────────────────────────────────────────────┘
+                             ↓
+┌─ IDENTIFY ─────────────────────────────────────────────────────────────┐
+│ What KIND of thing did I learn?                                        │
+│                                                                         │
+│ Is this a durable fact?              → MEMORY (semantic)               │
+│ Is this a binding correction?        → GUARDRAILS (procedural fix)     │
+│ Did I repeat this 3+ times?          → SKILL (procedural workflow)     │
+│ Nothing above?                       → DECAY (clean up stale entries)  │
+└────────────────────────────┬─────────────────────────────────────────────┘
+                             ↓
+┌─ ROUTE (level decision) ────────────────────────────────────────────────┐
+│ Where does this rule/skill belong?                                      │
+│                                                                         │
+│ Learned in THIS repo → AGENTS.md / CLAUDE.md (PROJECT level)           │
+│                        (other devs inherit it when they clone)          │
+│                                                                         │
+│ Learned EVERYWHERE  → ~/.agent-flywheel/ (GLOBAL level)                │
+│                        (portable across all your repos)                 │
+└────────────────────────────┬─────────────────────────────────────────────┘
+                             ↓
+┌─ LEVEL (self-score & visible log) ─────────────────────────────────────┐
+│ append LEVEL.md (personal learning curve: L2 → L5)                     │
+│ append LEARN.log (one-line record per session)                         │
+│ → machine-readable trend tracking                                      │
+└────────────────────────────┬─────────────────────────────────────────────┘
+                             ↓
+┌─ REMEMBER ─────────────────────────────────────────────────────────────┐
+│ memorix (preferred when reachable, cross-project searchable)            │
+│ + MEMORY.md (always-portable baseline)                                  │
+│ → this learning is now available in the next session                   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**What issues surface:**
+- **Repeated patterns (3+ times)** → candidate for a new skill or existing-skill improvement
+- **Binding corrections** → rules that keep you disciplined (fix a bug, avoid a gotcha)
+- **Project conventions** → rules learned in this repo that the team should inherit
+- **Personal preferences** → rules learned everywhere that should follow you across repos
+- **Stale or contradicted entries** → actively corrected in place (memory decay), not allowed to accumulate
+
+
 ## Prerequisites
 
 Zero required prerequisites beyond `bash`, `node`, and (Claude Code adapter
