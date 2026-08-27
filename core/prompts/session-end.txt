@@ -50,7 +50,7 @@ This is the full pipeline (Reflexion/CoALA-grounded — episodic scan, semantic 
 
 6. LEVEL (self-score, this trigger only — skip entirely on a periodic/mid-session pass). Check the DETECTED line for `level-up-coach`. `=yes`: prefer its rubric/routing. `=no`: read `core/prompts/reference/level-rubric.txt` and follow it: score this session, append one line to `~/.agent-flywheel/LEVEL.md`.
 
-7. DECAY. If anything learned this pass (in MEMORY, GUARDRAILS, or a skill) contradicts or obsoletes an existing entry, correct or remove the stale one in place rather than appending a second, contradicting entry anywhere — in memorix AND in MEMORY.md if both are in use. Stale memory is worse than no memory.
+7. DECAY. If anything learned this pass (in MEMORY, GUARDRAILS, or a skill) contradicts or obsoletes an existing entry, correct or remove the stale one in place rather than appending a second, contradicting entry anywhere — in memorix AND in MEMORY.md if both are in use. Stale memory is worse than no memory. For GUARDRAILS.md specifically, growth is also a DECAY trigger — see `core/prompts/reference/guardrails-format.txt`'s SIZE-TRIGGERED COMPACTION section before appending once the file has grown large; compact overlong/duplicate entries in the same pass rather than deferring it.
 
 8. VISIBLE LOG. Append exactly one line to `~/.agent-flywheel/LEARN.log` in this format (create the file if absent, never overwrite prior lines):
    `<ISO8601 timestamp> [<trigger>] <one-line summary of what changed: files touched, G-number, skill name, or "nothing durable">`

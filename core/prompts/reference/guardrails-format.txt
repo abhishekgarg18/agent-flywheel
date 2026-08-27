@@ -34,3 +34,19 @@ next agent noticing the file exists).
 DECAY applies to GUARDRAILS.md exactly like MEMORY.md: a guardrail proven wrong, obsolete, or
 superseded by a better rule gets corrected/removed in place — do not let a stale G-number linger
 next to its replacement.
+
+SIZE-TRIGGERED COMPACTION: growth itself is a DECAY trigger, not just correctness. Before writing
+a new entry, check the file's total size — `wc -l ~/.agent-flywheel/GUARDRAILS.md` or the current
+highest G-number. Once it's grown past roughly 60 entries (or noticeably every session-start nudge
+only shows the newest handful — `grep '^### G' | tail -10` — crowding out ones still relevant
+across projects), treat that as license to compact in the SAME pass, not defer it:
+  - Any entry whose body runs well past the format's own "1-3 sentences" shape gets tightened to
+    that shape — keep the rule and the one sentence of why, drop the blow-by-blow incident essay
+    (the one-line `_(context: ...)_` is where a pointer to more detail belongs, not a paragraph).
+  - Two or more entries teaching the same underlying mechanism from different symptoms (e.g. "verify
+    before claiming X" showing up three times for three different X's) get merged into one entry
+    that names all the symptoms it covers, with the other G-numbers noted as folded in — never
+    silently delete a G-number without leaving a one-line pointer at its old slot for anything that
+    may already reference it.
+  - Never drop a *distinct* lesson just to save space — compact prose, don't lose content. When in
+    doubt whether two entries are "the same lesson" or genuinely different, keep them separate.
